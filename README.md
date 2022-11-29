@@ -1,9 +1,9 @@
-# Aptos Switchboard SDK
+# Sui Switchboard SDK
 
-[![GitHub](https://img.shields.io/badge/--181717?logo=github&logoColor=ffffff)](https://github.com/switchboard-xyz/sbv2-aptos)&nbsp;
+[![GitHub](https://img.shields.io/badge/--181717?logo=github&logoColor=ffffff)](https://github.com/switchboard-xyz/sbv2-sui)&nbsp;
 [![twitter](https://badgen.net/twitter/follow/switchboardxyz)](https://twitter.com/switchboardxyz)&nbsp;&nbsp;
 
-A library of utility functions to interact with Switchboard Modules on Aptos
+A library of utility functions to interact with Switchboard Modules on Sui
 
 ## Live Deployment:
 
@@ -53,7 +53,7 @@ const [aggregator, createFeedTx] = await createFeed(
     minJobResults: 1, // minimum # of jobs that need to return a result
     minOracleResults: 1, // minumum # of oracles that need to respond for a result
     minUpdateDelaySeconds: 5, // minimum delay between rounds
-    coinType: "0x2::sui::SUI", // CoinType of the queue (now only AptosCoin)
+    coinType: "0x2::sui::SUI", // CoinType of the queue (now only Sui)
     initialLoadAmount: 1000, // load of the lease
     jobs: [
       {
@@ -82,20 +82,6 @@ await aggregator.openRound(user);
 /**
  * Listen to Aggregator Updates Off-Chain
  */
-
-// create event listener
-const onAggregatorUpdate = (
-  client: AptosClient,
-  callback: EventCallback,
-  pollIntervalMs: number = 1000
-) Promise<AptosEvent> => {
-  return AggregatorAccount.watch(
-    client,
-    SWITCHBOARD_ADDRESS,
-    callback,Yeah
-    pollIntervalMs
-  );
-};
 ```
 
 ### Reading Feeds
