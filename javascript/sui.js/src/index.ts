@@ -4,8 +4,17 @@ import BN from "bn.js";
 import {
   Ed25519Keypair,
   JsonRpcProvider,
+  SignableTransaction,
+  UnserializedSignableTransaction,
+  getObjectFields,
+  SuiEventEnvelope,
+  MoveCallTransaction,
   RawSigner,
+  SignerWithProvider,
+  SuiExecuteTransactionResponse,
   Network,
+  SubscriptionId,
+  Keypair,
 } from "@mysten/sui.js";
 import * as SHA3 from "js-sha3";
 export { OracleJob, IOracleJob } from "@switchboard-xyz/common";
@@ -13,7 +22,7 @@ export const SWITCHBOARD_DEVNET_ADDRESS = ``;
 export const SWITCHBOARD_TESTNET_ADDRESS = ``;
 export const SWITCHBOARD_MAINNET_ADDRESS = ``;
 
-export class AptosDecimal {
+export class SuiDecimal {
   constructor(
     readonly mantissa: string,
     readonly scale: number,
@@ -33,7 +42,7 @@ export class AptosDecimal {
     return result;
   }
 
-  static fromBig(val: Big): AptosDecimal {
+  static fromBig(val: Big): SuiDecimal {
     const value = val.c.slice();
     let e = val.e + 1;
     while (value.length - e > 9) {
@@ -45,10 +54,10 @@ export class AptosDecimal {
       value.push(0);
     }
 
-    return new AptosDecimal(value.join(""), value.length - e, val.s === -1);
+    return new SuiDecimal(value.join(""), value.length - e, val.s === -1);
   }
 
-  static fromObj(obj: Object): AptosDecimal {
+  static fromObj(obj: Object): SuiDecimal {
     const properties = ["mantissa", "scale", "neg"];
     properties.forEach((p) => {
       if (!(p in obj)) {
@@ -56,7 +65,7 @@ export class AptosDecimal {
       }
     });
 
-    return new AptosDecimal(obj["mantissa"], obj["scale"], obj["neg"]);
+    return new SuiDecimal(obj["mantissa"], obj["scale"], obj["neg"]);
   }
 }
 
@@ -67,17 +76,17 @@ export enum SwitchboardPermission {
 }
 
 export interface AggregatorAddJobParams {
-  job: MaybeHexString;
+  job: string;
   weight?: number;
 }
 
 export interface AggregatorInitParams {
-  authority: MaybeHexString; // owner of aggregator
+  authority: string; // owner of aggregator
   name?: string;
   metadata?: string;
-  queueAddress: MaybeHexString;
-  crankAddress: MaybeHexString;
-  coinType: MoveStructTag;
+  queueAddress: string;
+  crankAddress: string;
+  coinType: string;
   batchSize: number;
   minOracleResults: number;
   minJobResults: number;
@@ -90,13 +99,13 @@ export interface AggregatorInitParams {
   historySize?: number;
   readCharge?: number;
   rewardEscrow?: string;
-  readWhitelist?: MaybeHexString[];
+  readWhitelist?: string[];
   limitReadsToWhitelist?: boolean;
-  seed?: MaybeHexString;
+  seed?: string;
 }
 
 export interface AggregatorSaveResultParams {
-  oracleAddress: MaybeHexString;
+  oracleAddress: string;
   oracleIdx: number;
   error: boolean;
   // this should probably be automatically generated
@@ -107,13 +116,13 @@ export interface AggregatorSaveResultParams {
 }
 
 export interface OracleSaveResultParams extends AggregatorSaveResultParams {
-  aggregatorAddress: MaybeHexString;
+  aggregatorAddress: string;
 }
 
 export interface JobInitParams {
   name: string;
   metadata: string;
-  authority: MaybeHexString;
+  authority: string;
   data: string;
   weight?: number;
 }
@@ -127,8 +136,8 @@ export interface AggregatorSetConfigParams {
   authority?: string;
   name?: string;
   metadata?: string;
-  queueAddress?: MaybeHexString;
-  crankAddress?: MaybeHexString;
+  queueAddress?: string;
+  crankAddress?: string;
   batchSize?: number;
   minOracleResults?: number;
   minJobResults?: number;
@@ -140,27 +149,27 @@ export interface AggregatorSetConfigParams {
   disableCrank?: boolean;
   historySize?: number;
   readCharge?: number;
-  rewardEscrow?: MaybeHexString;
-  readWhitelist?: MaybeHexString[];
+  rewardEscrow?: string;
+  readWhitelist?: string[];
   limitReadsToWhitelist?: boolean;
   coinType?: string;
 }
 
 export interface AggregatorSetFeedRelayParams {
-  aggregator_addr: MaybeHexString;
-  relay_authority: MaybeHexString; // user that has authority to oracle public keys
+  aggregator_addr: string;
+  relay_authority: string; // user that has authority to oracle public keys
   oracle_keys: string[];
 }
 
 // set_feed_relay_oracle_keys
 export interface AggregatorSetFeedRelayOracleKeys {
-  aggregator_addr: MaybeHexString;
+  aggregator_addr: string;
   oracle_keys: string[];
 }
 
 export interface CrankInitParams {
-  queueAddress: MaybeHexString;
-  coinType: MoveStructTag;
+  queueAddress: string;
+  coinType: string;
 }
 
 export interface CrankPopParams {
@@ -174,14 +183,14 @@ export interface CrankPushParams {
 export interface OracleInitParams {
   name: string;
   metadata: string;
-  authority: MaybeHexString;
-  queue: MaybeHexString;
-  coinType: MoveStructTag;
-  seed?: MaybeHexString;
+  authority: string;
+  queue: string;
+  coinType: string;
+  seed?: string;
 }
 
 export interface OracleQueueInitParams {
-  authority: MaybeHexString;
+  authority: string;
   name: string;
   metadata: string;
   oracleTimeout: number;
@@ -204,13 +213,13 @@ export interface OracleQueueInitParams {
   save_reward?: number;
   open_round_reward?: number;
   slashing_penalty?: number;
-  coinType: MoveStructTag;
+  coinType: string;
 }
 
 export interface OracleQueueSetConfigsParams {
   name: string;
   metadata: string;
-  authority: MaybeHexString;
+  authority: string;
   oracleTimeout: number;
   reward: number;
   minStake: number;
@@ -231,60 +240,60 @@ export interface OracleQueueSetConfigsParams {
   save_reward?: number;
   open_round_reward?: number;
   slashing_penalty?: number;
-  coinType: MoveStructTag;
+  coinType: string;
 }
 
 export interface LeaseInitParams {
-  aggregatorAddress: MaybeHexString;
-  queueAddress: MaybeHexString;
-  withdrawAuthority: MaybeHexString;
+  aggregatorAddress: string;
+  queueAddress: string;
+  withdrawAuthority: string;
   initialAmount: number;
-  coinType: MoveStructTag;
+  coinType: string;
 }
 
 export interface LeaseExtendParams {
-  queueAddress: MaybeHexString;
+  queueAddress: string;
   loadAmount: number;
 }
 
 export interface LeaseWithdrawParams {
-  queueAddress: MaybeHexString;
+  queueAddress: string;
   amount: number;
 }
 
 export interface LeaseSetAuthorityParams {
-  queueAddress: MaybeHexString;
-  authority: MaybeHexString;
+  queueAddress: string;
+  authority: string;
 }
 
 export interface OracleWalletInitParams {
-  oracleAddress: MaybeHexString;
-  queueAddress: MaybeHexString;
+  oracleAddress: string;
+  queueAddress: string;
   coinType: string;
 }
 
 export interface OracleWalletContributeParams {
-  oracleAddress: MaybeHexString;
-  queueAddress: MaybeHexString;
+  oracleAddress: string;
+  queueAddress: string;
   loadAmount: number;
 }
 
 export interface OracleWalletWithdrawParams {
-  oracleAddress: MaybeHexString;
-  queueAddress: MaybeHexString;
+  oracleAddress: string;
+  queueAddress: string;
   amount: number;
 }
 
 export interface PermissionInitParams {
-  authority: MaybeHexString;
-  granter: MaybeHexString;
-  grantee: MaybeHexString;
+  authority: string;
+  granter: string;
+  grantee: string;
 }
 
 export interface PermissionSetParams {
-  authority: MaybeHexString;
-  granter: MaybeHexString;
-  grantee: MaybeHexString;
+  authority: string;
+  granter: string;
+  grantee: string;
   permission: SwitchboardPermission;
   enable: boolean;
 }
@@ -295,347 +304,124 @@ export type EventCallback = (
 
 /**
  * Sends and waits for an aptos tx to be confirmed
- * @param client
  * @param signer
- * @param method Aptos module method (ex: 0xSwitchboard::aggregator_add_job_action)
- * @param args Arguments for method (converts numbers to strings)
+ * @param txn
+ * @param debug
  * @returns
  */
-export async function sendAptosTx(
-  client: AptosClient,
-  signer: AptosAccount,
-  method: EntryFunctionId,
-  args: Array<any>,
-  type_args: Array<string> = [],
-  maxGasPrice: number = 2000
-): Promise<string> {
-  const payload = {
-    type: "entry_function_payload",
-    function: method,
-    type_arguments: type_args,
-    arguments: args,
-  };
-
-  let txnRequest = await client.generateTransaction(signer.address(), payload);
-
-  const simulation = (
-    await client.simulateTransaction(signer, txnRequest, {
-      estimateGasUnitPrice: true,
-      estimateMaxGasAmount: true, // @ts-ignore
-      estimatePrioritizedGasUnitPrice: true,
-    })
-  )[0];
-
-  if (Number(simulation.gas_unit_price) > maxGasPrice) {
-    throw Error(
-      `Estimated gas price from simulation ${simulation.gas_unit_price} above maximum (${maxGasPrice}).`
-    );
+export async function sendSuiTx(
+  signer: SignerWithProvider,
+  txn: SignableTransaction,
+  debug?: boolean
+): Promise<SuiExecuteTransactionResponse> {
+  let txnRequest = await signer.dryRunTransaction(txn);
+  if (txnRequest.status.error) {
+    throw new Error(txnRequest.status.error);
   }
-
-  txnRequest = await client.generateTransaction(signer.address(), payload, {
-    gas_unit_price: simulation.gas_unit_price,
-  });
-
-  if (simulation.success === false) {
-    console.error(simulation);
-    throw new Error(`TxFailure: ${simulation.vm_status}`);
+  if (debug) {
+    console.info(txnRequest);
   }
-
-  const signedTxn = await client.signTransaction(signer, txnRequest);
-  const transactionRes = await client.submitTransaction(signedTxn);
-  await client.waitForTransaction(transactionRes.hash);
-  return transactionRes.hash;
+  return signer.signAndExecuteTransaction(txn);
 }
 
 /**
- * Generates an aptos tx for client
- * @param method Aptos module method (ex: 0xSwitchboard::aggregator_add_job_action)
+ * Generates an sui tx for client
+ * @param method sui module method
  * @param args Arguments for method (converts numbers to strings)
- * @param type_args Arguments for type_args
+ * @param typeArgs Arguments for type_args
  * @returns
  */
-export function getAptosTx(
-  method: EntryFunctionId,
-  args: Array<any>,
-  type_args: Array<string> = []
-): Types.TransactionPayload {
-  const payload: Types.TransactionPayload = {
-    type: "entry_function_payload",
-    function: method,
-    type_arguments: type_args,
+export function getSuiMoveCall(
+  method: string,
+  args: Array<any> = [],
+  typeArgs: Array<string> = [],
+  gasBudget: number = 10000
+): MoveCallTransaction {
+  const [packageObjectId, module, fn] = method.split("::");
+  const payload: MoveCallTransaction = {
+    packageObjectId,
+    module,
+    function: fn,
+    typeArguments: typeArgs,
     arguments: args,
+    gasBudget,
   };
   return payload;
 }
 
-export async function simulateAndRun(
-  client: AptosClient,
-  user: AptosAccount,
-  txn: Types.TransactionPayload,
-  maxGasPrice: number = 3000
-) {
-  let txnRequest = await client.generateTransaction(
-    user.address(),
-    txn as Types.EntryFunctionPayload
-  );
-
-  const simulation = (
-    await client.simulateTransaction(user, txnRequest, {
-      estimateGasUnitPrice: true,
-      estimateMaxGasAmount: true, // @ts-ignore
-      estimatePrioritizedGasUnitPrice: true,
-    })
-  )[0];
-
-  if (Number(simulation.gas_unit_price) > maxGasPrice) {
-    throw Error(
-      `Estimated gas price from simulation ${simulation.gas_unit_price} above maximum (${maxGasPrice}).`
-    );
-  }
-
-  txnRequest = await client.generateTransaction(
-    user.address(),
-    txn as Types.EntryFunctionPayload,
-    { gas_unit_price: simulation.gas_unit_price }
-  );
-
-  if (simulation.success === false) {
-    console.error(simulation);
-    throw new Error(`TxFailure: ${simulation.vm_status}`);
-  }
-
-  const signedTxn = await client.signTransaction(user, txnRequest);
-  const transactionRes = await client.submitTransaction(signedTxn);
-  await client.waitForTransaction(transactionRes.hash);
-  return transactionRes.hash;
-}
-
-export async function sendRawAptosTx(
-  client: AptosClient,
-  signer: AptosAccount,
-  method: EntryFunctionId,
-  raw_args: Array<any>,
-  raw_type_args: BCS.Seq<TxnBuilderTypes.TypeTag> = [],
-  maxGasPrice: number = 2000
-): Promise<string> {
-  // We need to pass a token type to the `transfer` function.
-
-  const methodInfo = method.split("::");
-  const entryFunctionPayload =
-    new TxnBuilderTypes.TransactionPayloadEntryFunction(
-      TxnBuilderTypes.EntryFunction.natural(
-        // Fully qualified module name, `AccountAddress::ModuleName`
-        `${methodInfo[0]}::${methodInfo[1]}`,
-        // Module function
-        methodInfo[2],
-        // The coin type to transfer
-        raw_type_args,
-        // Arguments for function `transfer`: receiver account address and amount to transfer
-        raw_args
-      )
-    );
-
-  let rawTxn = await client.generateRawTransaction(
-    signer.address(),
-    entryFunctionPayload
-  );
-
-  const simulation = (
-    await client.simulateTransaction(signer, rawTxn, {
-      estimateGasUnitPrice: true,
-      estimateMaxGasAmount: true, // @ts-ignore
-      estimatePrioritizedGasUnitPrice: true,
-    })
-  )[0];
-
-  if (Number(simulation.gas_unit_price) > maxGasPrice) {
-    throw Error(
-      `Estimated gas price from simulation ${simulation.gas_unit_price} above maximum (${maxGasPrice}).`
-    );
-  }
-
-  rawTxn = await client.generateRawTransaction(
-    signer.address(),
-    entryFunctionPayload,
-    { gasUnitPrice: BigInt(simulation.gas_unit_price) }
-  );
-
-  const bcsTxn = AptosClient.generateBCSTransaction(signer, rawTxn);
-
-  if (simulation.success === false) {
-    console.error(simulation);
-    throw new Error(`TxFailure: ${simulation.vm_status}`);
-  }
-
-  const transactionRes = await client.submitSignedBCSTransaction(bcsTxn);
-  await client.waitForTransaction(transactionRes.hash);
-  return transactionRes.hash;
-}
-
 /**
- * Poll Events on Aptos
- * @Note uncleared setTimeout calls will keep processes from ending organically (SIGTERM is needed)
+ * Poll Events on Sui
  */
-export class AptosEvent {
-  intervalId?: ReturnType<typeof setInterval>;
+export class SuiEvent {
+  intervalId?: SubscriptionId;
   constructor(
-    readonly client: AptosClient,
-    readonly eventHandlerOwner: HexString,
-    readonly eventOwnerStruct: MoveStructTag,
-    readonly eventHandlerName: string,
-    readonly pollIntervalMs: number = 1000
+    readonly provider: JsonRpcProvider,
+    readonly pkg: string,
+    readonly moduleName: string,
+    readonly eventType: string
   ) {}
 
   async onTrigger(
     callback: EventCallback,
     errorHandler?: (error: unknown) => void
   ) {
-    let lastSequenceNumber = "0";
-    const ownerData = await this.client.getAccountResource(
-      this.eventHandlerOwner.hex(),
-      this.eventOwnerStruct
-    );
-    try {
-      lastSequenceNumber = (
-        Number(ownerData.data[this.eventHandlerName].counter) - 1
-      ).toString();
-    } catch (error) {
-      console.error(JSON.stringify(ownerData, undefined, 2), error);
-    }
-    if (Number(ownerData.data[this.eventHandlerName].counter) === -1) {
-      lastSequenceNumber = "0";
-    }
-
-    this.intervalId = setInterval(async () => {
-      try {
-        const events = await this.client.getEventsByEventHandle(
-          this.eventHandlerOwner,
-          this.eventOwnerStruct,
-          this.eventHandlerName,
-          {
-            start: BigInt(Number(lastSequenceNumber) + 1),
-            limit: 500,
-          }
-        );
-        if (events.length !== 0) {
-          // increment sequence number
-          lastSequenceNumber = events.at(-1)!.sequence_number;
-        }
-        for (let event of events) {
-          callback(event).catch((error) => {
-            if (errorHandler) {
-              errorHandler(error);
-            } else {
-              throw error;
-            }
-          });
-        }
-      } catch (error) {
-        if (errorHandler) {
-          errorHandler(error);
+    this.intervalId = await this.provider.subscribeEvent(
+      {
+        All: [
+          { EventType: "MoveEvent" },
+          { Package: this.pkg },
+          { Module: this.moduleName },
+          { MoveEventType: this.eventType },
+        ],
+      },
+      (event: SuiEventEnvelope) => {
+        try {
+          callback(event);
+        } catch (e) {
+          errorHandler(e);
         }
       }
-    }, this.pollIntervalMs);
+    );
     return this.intervalId;
   }
 
   stop() {
-    clearInterval(this.intervalId);
-  }
-}
-
-export class StateAccount {
-  constructor(
-    readonly client: AptosClient,
-    readonly address: MaybeHexString,
-    readonly payer: AptosAccount,
-    readonly switchboardAddress: MaybeHexString
-  ) {}
-
-  static async init(
-    client: AptosClient,
-    account: AptosAccount,
-    switchboardAddress: MaybeHexString
-  ): Promise<[StateAccount, string]> {
-    const tx = await sendAptosTx(
-      client,
-      account,
-      `${switchboardAddress}::switchboard_init_action::run`,
-      []
-    );
-
-    return [
-      new StateAccount(client, account.address(), account, switchboardAddress),
-      tx,
-    ];
-  }
-
-  async loadData(): Promise<any> {
-    return (
-      await this.client.getAccountResource(
-        this.address,
-        `${this.switchboardAddress}::switchboard::State`
-      )
-    ).data;
+    this.provider.unsubscribeEvent(this.intervalId);
   }
 }
 
 export class AggregatorAccount {
   constructor(
-    readonly client: AptosClient,
-    readonly address: MaybeHexString,
-    readonly switchboardAddress: MaybeHexString,
-    readonly coinType: MoveStructTag = "0x1::aptos_coin::AptosCoin"
+    readonly provider: JsonRpcProvider,
+    readonly address: string,
+    readonly switchboardAddress: string,
+    readonly coinType: string = "0x2::sui::SUI"
   ) {}
 
-  async loadData(): Promise<types.Aggregator> {
-    const results = await this.client.getAccountResources(
-      HexString.ensure(this.address).hex()
+  async loadData(): Promise<any> {
+    const result = await this.provider.getObject(this.address);
+    const childResults = await this.provider.getObjectsOwnedByAddress(
+      this.address
     );
-    const agg = results.reduce((prev: any, current: any) => {
-      return {
-        ...prev,
-        ...current.data,
-      };
-    }, {});
-    const latestConfirmedRound = results
-      .filter(
-        (res) =>
-          res.type ===
-          `${this.switchboardAddress}::aggregator::AggregatorRound<${this.switchboardAddress}::aggregator::LatestConfirmedRound>`
+    const childFields = (
+      await Promise.all(
+        childResults.map(async (res) => {
+          const data = await this.provider.getObject(res.objectId);
+          return getObjectFields(data);
+        })
       )
-      .pop()!.data;
-    const currentRound = results
-      .filter(
-        (res) =>
-          res.type ===
-          `${this.switchboardAddress}::aggregator::AggregatorRound<${this.switchboardAddress}::aggregator::CurrentRound>`
-      )
-      .pop()!.data;
-
-    // removed field current_payout
-    // @ts-ignore
-    currentRound.current_payout = [];
-    // @ts-ignore
-    latestConfirmedRound.current_payout = [];
-
-    // @ts-ignore
-    agg.current_round = currentRound;
-    // @ts-ignore
-    agg.latest_confirmed_round = latestConfirmedRound;
-
-    return types.Aggregator.fromMoveStruct(agg as any);
+    ).reduce((obj, curr) => ({ ...obj, ...curr }), {});
+    const agg = {
+      ...childFields,
+      ...getObjectFields(result),
+    };
+    return agg;
   }
 
   async loadJobs(): Promise<Array<OracleJob>> {
     const data = await this.loadData();
     const jobs = data.jobKeys.map(
-      (key) =>
-        new JobAccount(
-          this.client,
-          key,
-          HexString.ensure(this.switchboardAddress).hex()
-        )
+      (key) => new JobAccount(this.provider, key, this.switchboardAddress)
     );
     const promises: Array<Promise<OracleJob>> = [];
     for (let job of jobs) {
@@ -651,32 +437,22 @@ export class AggregatorAccount {
    * @param params AggregatorInitParams initialization params
    */
   static async init(
-    client: AptosClient,
-    account: AptosAccount,
+    provider: JsonRpcProvider,
+    signer: Keypair,
     params: AggregatorInitParams,
-    switchboardAddress: MaybeHexString
-  ): Promise<[AggregatorAccount, string]> {
-    const { mantissa: vtMantissa, scale: vtScale } = AptosDecimal.fromBig(
+    switchboardAddress: string
+  ): Promise<[AggregatorAccount, SuiExecuteTransactionResponse]> {
+    const { mantissa: vtMantissa, scale: vtScale } = SuiDecimal.fromBig(
       params.varianceThreshold ?? new Big(0)
     );
 
-    const seed = params.seed
-      ? HexString.ensure(HexString.ensure(params.seed))
-      : new AptosAccount().address();
-    const resource_address = generateResourceAccountAddress(
-      HexString.ensure(account.address()),
-      bcsAddressToBytes(HexString.ensure(seed))
-    );
-
-    const tx = await sendAptosTx(
-      client,
-      account,
+    const tx = getSuiMoveCall(
       `${switchboardAddress}::aggregator_init_action::run`,
       [
         params.name ?? "",
         params.metadata ?? "",
-        HexString.ensure(params.queueAddress).hex(),
-        HexString.ensure(params.crankAddress).hex(),
+        params.queueAddress,
+        params.crankAddress,
         params.batchSize,
         params.minOracleResults,
         params.minJobResults,
@@ -690,32 +466,44 @@ export class AggregatorAccount {
         params.historySize ?? 0,
         params.readCharge ?? 0,
         params.rewardEscrow
-          ? HexString.ensure(params.rewardEscrow).hex()
-          : account.address().hex(),
-
+          ? params.rewardEscrow
+          : signer.getPublicKey().toSuiAddress(),
         params.readWhitelist ?? [],
         params.limitReadsToWhitelist ?? false,
-
-        HexString.ensure(params.authority).hex(),
-        HexString.ensure(seed).hex(),
+        params.authority,
       ],
-      [params.coinType ?? "0x1::aptos_coin::AptosCoin"]
+      [params.coinType ?? "0x2::sui::SUI"]
     );
+    const signerWithProvider = new RawSigner(signer, provider);
+    const result = await sendSuiTx(signerWithProvider, {
+      kind: "moveCall",
+      data: tx,
+    });
 
-    return [
-      new AggregatorAccount(
-        client,
-        resource_address,
-        switchboardAddress,
-        params.coinType ?? "0x1::aptos_coin::AptosCoin"
-      ),
-      tx,
-    ];
+    if ("EffectsCert" in result) {
+      const txEffects = result.EffectsCert.effects.effects;
+      const aggId = txEffects.sharedObjects.pop();
+      if (!aggId) {
+        return;
+      }
+
+      return [
+        new AggregatorAccount(
+          provider,
+          aggId.objectId,
+          switchboardAddress,
+          params.coinType ?? "0x2::sui::SUI"
+        ),
+        result,
+      ];
+    }
+
+    throw new Error("No Aggregator Data Created.");
   }
 
   async latestValue(): Promise<number> {
     const data = await this.loadData();
-    return new AptosDecimal(
+    return new SuiDecimal(
       data.latestConfirmedRound.result.value.toString(),
       data.latestConfirmedRound.result.dec,
       Boolean(data.latestConfirmedRound.result.neg)
@@ -725,150 +513,134 @@ export class AggregatorAccount {
   }
 
   async addJob(
-    account: AptosAccount,
+    signer: Keypair,
     params: AggregatorAddJobParams
-  ): Promise<string> {
-    return await sendAptosTx(
-      this.client,
-      account,
+  ): Promise<SuiExecuteTransactionResponse> {
+    const tx = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_add_job_action::run`,
-      [
-        HexString.ensure(this.address).hex(),
-        HexString.ensure(params.job).hex(),
-        params.weight || 1,
-      ]
+      [this.address, params.job, params.weight || 1]
     );
+    const signerWithProvider = new RawSigner(signer, this.provider);
+    return sendSuiTx(signerWithProvider, {
+      kind: "moveCall",
+      data: tx,
+    });
   }
 
-  addJobTx(params: AggregatorAddJobParams): Types.TransactionPayload {
-    return getAptosTx(
+  addJobTx(params: AggregatorAddJobParams): SignableTransaction {
+    const txData = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_add_job_action::run`,
-      [
-        HexString.ensure(this.address).hex(),
-        HexString.ensure(params.job).hex(),
-        params.weight || 1,
-      ]
+      [this.address, params.job, params.weight || 1]
     );
+    return {
+      kind: "moveCall",
+      data: txData,
+    };
   }
 
-  removeJobTx(params: AggregatorAddJobParams): Types.TransactionPayload {
-    return getAptosTx(
+  removeJobTx(params: AggregatorAddJobParams): SignableTransaction {
+    const txData = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_remove_job_action::run`,
-      [HexString.ensure(this.address).hex(), HexString.ensure(params.job).hex()]
+      [this.address, params.job]
     );
+    return {
+      kind: "moveCall",
+      data: txData,
+    };
   }
 
   async saveResult(
-    account: AptosAccount,
+    signer: Keypair,
     params: AggregatorSaveResultParams
-  ): Promise<string> {
+  ): Promise<SuiExecuteTransactionResponse> {
     const {
       mantissa: valueMantissa,
       scale: valueScale,
       neg: valueNeg,
-    } = AptosDecimal.fromBig(params.value);
+    } = SuiDecimal.fromBig(params.value);
     const {
       mantissa: minResponseMantissa,
       scale: minResponseScale,
       neg: minResponseNeg,
-    } = AptosDecimal.fromBig(params.minResponse);
+    } = SuiDecimal.fromBig(params.minResponse);
     const {
       mantissa: maxResponseMantissa,
       scale: maxResponseScale,
       neg: maxResponseNeg,
-    } = AptosDecimal.fromBig(params.maxResponse);
+    } = SuiDecimal.fromBig(params.maxResponse);
 
-    return sendRawAptosTx(
-      this.client,
-      account,
+    const tx = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_save_result_action::run`,
       [
-        BCS.bcsToBytes(
-          TxnBuilderTypes.AccountAddress.fromHex(params.oracleAddress)
-        ),
-        BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex(this.address)),
-        BCS.bcsSerializeUint64(params.oracleIdx),
-        BCS.bcsSerializeBool(params.error),
-        BCS.bcsSerializeU128(Number(valueMantissa)),
-        BCS.bcsSerializeU8(valueScale),
-        BCS.bcsSerializeBool(valueNeg),
-        BCS.bcsSerializeBytes(
-          HexString.ensure(params.jobsChecksum).toUint8Array()
-        ),
-        BCS.bcsSerializeU128(Number(minResponseMantissa)),
-        BCS.bcsSerializeU8(minResponseScale),
-        BCS.bcsSerializeBool(minResponseNeg),
-        BCS.bcsSerializeU128(Number(maxResponseMantissa)),
-        BCS.bcsSerializeU8(maxResponseScale),
-        BCS.bcsSerializeBool(maxResponseNeg),
+        params.oracleAddress,
+        this.address,
+        params.oracleIdx,
+        params.error,
+        valueMantissa,
+        valueScale,
+        valueNeg,
+        params.jobsChecksum,
+        minResponseMantissa,
+        minResponseScale,
+        minResponseNeg,
+        maxResponseMantissa,
+        maxResponseScale,
+        maxResponseNeg,
       ],
-      [
-        new TxnBuilderTypes.TypeTagStruct(
-          TxnBuilderTypes.StructTag.fromString(
-            this.coinType ?? "0x1::aptos_coin::AptosCoin"
-          )
-        ),
-      ],
-      200
+      [this.coinType ?? "0x2::sui::SUI"]
     );
+
+    const signerWithProvider = new RawSigner(signer, this.provider);
+    return sendSuiTx(signerWithProvider, {
+      kind: "moveCall",
+      data: tx,
+    });
   }
 
-  async openRound(account: AptosAccount, jitter?: number): Promise<string> {
-    return await sendAptosTx(
-      this.client,
-      account,
+  async openRound(
+    signer: Keypair,
+    jitter?: number
+  ): Promise<SuiExecuteTransactionResponse> {
+    const tx = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_open_round_action::run`,
-      [HexString.ensure(this.address).hex(), jitter ?? 1],
-      [this.coinType],
-      200
+      [this.address, jitter ?? 1],
+      [this.coinType]
     );
+
+    const signerWithProvider = new RawSigner(signer, this.provider);
+    return sendSuiTx(signerWithProvider, {
+      kind: "moveCall",
+      data: tx,
+    });
   }
 
-  static async openRoundN(
-    client: AptosClient,
-    account: AptosAccount,
-    aggregatorAddresses: MaybeHexString[],
-    switchboardAddress: MaybeHexString,
-    jitter?: number,
-    coinType?: string
-  ) {
-    return await sendAptosTx(
-      client,
-      account,
-      `${switchboardAddress}::aggregator_open_round_action::run_many`,
-      [
-        aggregatorAddresses.map((addr) => HexString.ensure(addr).hex()),
-        jitter ?? 1,
-      ],
-      [coinType ?? "0x1::aptos_coin::AptosCoin"],
-      200
-    );
-  }
-
-  openRoundTx(): Types.TransactionPayload {
-    return getAptosTx(
+  openRoundTx(): SignableTransaction {
+    const txData = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_open_round_action::run`,
-      [HexString.ensure(this.address).hex(), 1],
-      [this.coinType ?? "0x1::aptos_coin::AptosCoin"]
+      [this.address, 1],
+      [this.coinType ?? "0x2::sui::SUI"]
     );
+    return {
+      kind: "moveCall",
+      data: txData,
+    };
   }
 
   async setConfigTx(
     params: AggregatorSetConfigParams
-  ): Promise<Types.TransactionPayload> {
+  ): Promise<SignableTransaction> {
     const aggregator = await this.loadData();
-    // TODO
-    const { mantissa: vtMantissa, scale: vtScale } = AptosDecimal.fromBig(
+    const { mantissa: vtMantissa, scale: vtScale } = SuiDecimal.fromBig(
       params.varianceThreshold ?? new Big(0)
     );
-    const tx = getAptosTx(
+    const txData = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_set_configs_action::run`,
       [
-        HexString.ensure(this.address).hex(),
+        this.address,
         params.name ?? aggregator.name,
         params.metadata ?? aggregator.metadata,
-        HexString.ensure(params.queueAddress ?? aggregator.queueAddr).hex(),
-        HexString.ensure(params.crankAddress ?? aggregator.crankAddr).hex(),
+        params.queueAddress ?? aggregator.queueAddr,
+        params.crankAddress ?? aggregator.crankAddr,
         params.batchSize ?? aggregator.batchSize.toNumber(),
         params.minOracleResults ?? aggregator.minOracleResults.toNumber(),
         params.minJobResults ?? aggregator.minJobResults.toNumber(),
@@ -876,85 +648,84 @@ export class AggregatorAccount {
           aggregator.minUpdateDelaySeconds.toNumber(),
         params.startAfter ?? aggregator.startAfter.toNumber(),
         params.varianceThreshold
-          ? Number(vtMantissa)
-          : aggregator.varianceThreshold.value.toNumber(),
+          ? vtMantissa
+          : aggregator.varianceThreshold.value.toString(),
         params.varianceThreshold ? vtScale : aggregator.varianceThreshold.dec,
         params.forceReportPeriod ?? aggregator.forceReportPeriod.toNumber(),
         params.expiration ?? aggregator.expiration.toNumber(), // @ts-ignore
         params.disableCrank ?? false, // @ts-ignore
         params.historySize ?? 0, // @ts-ignore
         params.readCharge ?? aggregator.readCharge.toNumber(),
-        params.rewardEscrow
-          ? HexString.ensure(params.rewardEscrow).hex()
-          : HexString.ensure(aggregator.rewardEscrow).hex(),
+        params.rewardEscrow ? params.rewardEscrow : aggregator.rewardEscrow,
         params.readWhitelist ?? aggregator.readWhitelist,
         params.limitReadsToWhitelist ?? aggregator.limitReadsToWhitelist,
         params.authority ?? aggregator.authority,
       ],
-      [params.coinType ?? "0x1::aptos_coin::AptosCoin"] // TODO
+      [params.coinType ?? "0x2::sui::SUI"] // TODO
     );
-    return tx;
+
+    return {
+      kind: "moveCall",
+      data: txData,
+    };
   }
 
   async setConfig(
-    account: AptosAccount,
+    signer: Keypair,
     params: AggregatorSetConfigParams
-  ): Promise<string> {
+  ): Promise<SuiExecuteTransactionResponse> {
     const aggregator = await this.loadData();
     // TODO: this looks wrong
-    const { mantissa: vtMantissa, scale: vtScale } = AptosDecimal.fromBig(
+    const { mantissa: vtMantissa, scale: vtScale } = SuiDecimal.fromBig(
       params.varianceThreshold ?? new Big(0)
     );
-    const paramsRaw: Array<any> = [
-      HexString.ensure(this.address).hex(),
-      params.name ?? aggregator.name,
-      params.metadata ?? aggregator.metadata,
-      HexString.ensure(params.queueAddress ?? aggregator.queueAddr).hex(),
-      HexString.ensure(params.crankAddress ?? aggregator.crankAddr).hex(),
-      params.batchSize ?? aggregator.batchSize.toNumber(),
-      params.minOracleResults ?? aggregator.minOracleResults.toNumber(),
-      params.minJobResults ?? aggregator.minJobResults.toNumber(),
-      params.minUpdateDelaySeconds ??
-        aggregator.minUpdateDelaySeconds.toNumber(),
-      params.startAfter ?? aggregator.startAfter.toNumber(),
-      params.varianceThreshold
-        ? Number(vtMantissa)
-        : aggregator.varianceThreshold.value.toNumber(),
-      params.varianceThreshold ? vtScale : aggregator.varianceThreshold.dec,
-      params.forceReportPeriod ?? aggregator.forceReportPeriod.toNumber(),
-      params.expiration ?? aggregator.expiration.toNumber(), // @ts-ignore
-      params.disableCrank ?? false, // @ts-ignore
-      params.historySize ?? 0, // @ts-ignore
-      params.readCharge ?? aggregator.readCharge.toNumber(),
-      params.rewardEscrow
-        ? HexString.ensure(params.rewardEscrow).hex()
-        : HexString.ensure(aggregator.rewardEscrow).hex(),
-      params.readWhitelist ?? aggregator.readWhitelist,
-      params.limitReadsToWhitelist ?? aggregator.limitReadsToWhitelist,
-      params.authority ?? aggregator.authority,
-    ];
-    return await sendAptosTx(
-      this.client,
-      account,
+    const txData = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_set_configs_action::run`,
-      paramsRaw,
-      [params.coinType ?? "0x1::aptos_coin::AptosCoin"] // TODO
+      [
+        this.address,
+        params.name ?? aggregator.name,
+        params.metadata ?? aggregator.metadata,
+        params.queueAddress ?? aggregator.queueAddr,
+        params.crankAddress ?? aggregator.crankAddr,
+        params.batchSize ?? aggregator.batchSize.toNumber(),
+        params.minOracleResults ?? aggregator.minOracleResults.toNumber(),
+        params.minJobResults ?? aggregator.minJobResults.toNumber(),
+        params.minUpdateDelaySeconds ??
+          aggregator.minUpdateDelaySeconds.toNumber(),
+        params.startAfter ?? aggregator.startAfter.toNumber(),
+        params.varianceThreshold
+          ? vtMantissa
+          : aggregator.varianceThreshold.value.toString(),
+        params.varianceThreshold ? vtScale : aggregator.varianceThreshold.dec,
+        params.forceReportPeriod ?? aggregator.forceReportPeriod.toNumber(),
+        params.expiration ?? aggregator.expiration.toNumber(), // @ts-ignore
+        params.disableCrank ?? false, // @ts-ignore
+        params.historySize ?? 0, // @ts-ignore
+        params.readCharge ?? aggregator.readCharge.toNumber(),
+        params.rewardEscrow ? params.rewardEscrow : aggregator.rewardEscrow,
+        params.readWhitelist ?? aggregator.readWhitelist,
+        params.limitReadsToWhitelist ?? aggregator.limitReadsToWhitelist,
+        params.authority ?? aggregator.authority,
+      ]
     );
+    const signerWithProvider = new RawSigner(signer, this.provider);
+    return sendSuiTx(signerWithProvider, {
+      kind: "moveCall",
+      data: txData,
+    });
   }
 
   static watch(
-    client: AptosClient,
-    switchboardAddress: MaybeHexString,
+    provider: JsonRpcProvider,
+    switchboardAddress: string,
     callback: EventCallback,
     pollingIntervalMs = 1000
-  ): AptosEvent {
-    const switchboardHexString = HexString.ensure(switchboardAddress);
-    const event = new AptosEvent(
-      client,
-      switchboardHexString,
-      `${switchboardHexString.hex()}::switchboard::State`,
-      "aggregator_update_events",
-      pollingIntervalMs
+  ): SuiEvent {
+    const event = new SuiEvent(
+      provider,
+      switchboardAddress,
+      `${switchboardAddress}::switchboard::State`,
+      "aggregator_update_events"
     );
     event.onTrigger(callback);
     return event;
@@ -962,7 +733,7 @@ export class AggregatorAccount {
 
   static async shouldReportValue(
     value: Big,
-    aggregator: types.Aggregator
+    aggregator: any
   ): Promise<boolean> {
     if ((aggregator.latestConfirmedRound?.numSuccess ?? 0) === 0) {
       return true;
@@ -972,12 +743,12 @@ export class AggregatorAccount {
     if (startAfter.gt(timestamp)) {
       return false;
     }
-    const varianceThreshold: Big = new AptosDecimal(
+    const varianceThreshold: Big = new SuiDecimal(
       aggregator.varianceThreshold.value.toString(10),
       aggregator.varianceThreshold.dec,
       Boolean(aggregator.varianceThreshold.neg)
     ).toBig();
-    const latestResult: Big = new AptosDecimal(
+    const latestResult: Big = new SuiDecimal(
       aggregator.latestConfirmedRound.result.value.toString(),
       aggregator.latestConfirmedRound.result.dec,
       Boolean(aggregator.latestConfirmedRound.result.neg)
@@ -1007,25 +778,20 @@ export class AggregatorAccount {
 
 export class JobAccount {
   constructor(
-    readonly client: AptosClient,
-    readonly address: MaybeHexString,
-    readonly switchboardAddress: MaybeHexString
+    readonly provider: JsonRpcProvider,
+    readonly address: string,
+    readonly switchboardAddress: string
   ) {}
 
-  async loadData(): Promise<types.Job> {
-    const data = (
-      await this.client.getAccountResource(
-        this.address,
-        `${HexString.ensure(this.switchboardAddress).hex()}::job::Job`
-      )
-    ).data;
-    return types.Job.fromMoveStruct(data as any);
+  async loadData(): Promise<any> {
+    const result = await this.provider.getObject(this.address);
+    const job = getObjectFields(result);
+    return { ...job };
   }
-
   async loadJob(): Promise<OracleJob> {
     const data = await this.loadData();
 
-    // on-chain hex encoded base64 -> base64 -> Uint8Array -> OracleJob
+    // TODO: Fix this
     const job = OracleJob.decodeDelimited(
       Buffer.from(Buffer.from(data.data).toString(), "base64")
     );
@@ -1039,10 +805,10 @@ export class JobAccount {
    * @param params JobInitParams initialization params
    */
   static async init(
-    client: AptosClient,
+    provider: JsonRpcProvider,
     account: AptosAccount,
     params: JobInitParams,
-    switchboardAddress: MaybeHexString
+    switchboardAddress: string
   ): Promise<[JobAccount, string]> {
     const tx = await sendAptosTx(
       client,
@@ -1066,11 +832,11 @@ export class JobAccount {
    * @param params JobInitParams initialization params
    */
   static initTx(
-    client: AptosClient,
-    account: MaybeHexString,
+    provider: JsonRpcProvider,
+    account: string,
     params: JobInitParams,
-    switchboardAddress: MaybeHexString
-  ): [JobAccount, Types.TransactionPayload] {
+    switchboardAddress: string
+  ): [JobAccount, SignableTransaction] {
     const tx = getAptosTx(`${switchboardAddress}::job_init_action::run`, [
       params.name,
       params.metadata,
@@ -1084,10 +850,10 @@ export class JobAccount {
 
 export class CrankAccount {
   constructor(
-    readonly client: AptosClient,
-    readonly address: MaybeHexString,
-    readonly switchboardAddress: MaybeHexString,
-    readonly coinType: MoveStructTag = "0x1::aptos_coin::AptosCoin"
+    readonly provider: JsonRpcProvider,
+    readonly address: string,
+    readonly switchboardAddress: string,
+    readonly coinType: string = "0x2::sui::SUI"
   ) {}
 
   /**
@@ -1097,17 +863,17 @@ export class CrankAccount {
    * @param params CrankInitParams initialization params
    */
   static async init(
-    client: AptosClient,
+    provider: JsonRpcProvider,
     account: AptosAccount,
     params: CrankInitParams,
-    switchboardAddress: MaybeHexString
+    switchboardAddress: string
   ): Promise<[CrankAccount, string]> {
     const tx = await sendAptosTx(
       client,
       account,
       `${switchboardAddress}::crank_init_action::run`,
       [HexString.ensure(params.queueAddress).hex()],
-      [params.coinType ?? "0x1::aptos_coin::AptosCoin"]
+      [params.coinType ?? "0x2::sui::SUI"]
     );
 
     return [
@@ -1115,7 +881,7 @@ export class CrankAccount {
         client,
         account.address(),
         switchboardAddress,
-        params.coinType ?? "0x1::aptos_coin::AptosCoin"
+        params.coinType ?? "0x2::sui::SUI"
       ),
       tx,
     ];
@@ -1134,21 +900,18 @@ export class CrankAccount {
         HexString.ensure(this.address).hex(),
         HexString.ensure(params.aggregatorAddress).hex(),
       ],
-      [this.coinType ?? "0x1::aptos_coin::AptosCoin"]
+      [this.coinType ?? "0x2::sui::SUI"]
     );
   }
 
-  pushTx(
-    account: MaybeHexString,
-    params: CrankPushParams
-  ): Types.TransactionPayload {
+  pushTx(account: string, params: CrankPushParams): SignableTransaction {
     return getAptosTx(
       `${this.switchboardAddress}::crank_push_action::run`,
       [
         HexString.ensure(this.address).hex(),
         HexString.ensure(params.aggregatorAddress).hex(),
       ],
-      [this.coinType ?? "0x1::aptos_coin::AptosCoin"]
+      [this.coinType ?? "0x2::sui::SUI"]
     );
   }
 
@@ -1191,10 +954,10 @@ export class CrankAccount {
 
 export class OracleAccount {
   constructor(
-    readonly client: AptosClient,
-    readonly address: MaybeHexString,
-    readonly switchboardAddress: MaybeHexString,
-    readonly coinType: MoveStructTag = "0x1::aptos_coin::AptosCoin"
+    readonly provider: JsonRpcProvider,
+    readonly address: string,
+    readonly switchboardAddress: string,
+    readonly coinType: string = "0x2::sui::SUI"
   ) {}
 
   /**
@@ -1204,10 +967,10 @@ export class OracleAccount {
    * @param params Oracle initialization params
    */
   static async init(
-    client: AptosClient,
+    provider: JsonRpcProvider,
     account: AptosAccount,
     params: OracleInitParams,
-    switchboardAddress: MaybeHexString
+    switchboardAddress: string
   ): Promise<[OracleAccount, string]> {
     const seed = params.seed
       ? HexString.ensure(HexString.ensure(params.seed))
@@ -1228,7 +991,7 @@ export class OracleAccount {
         HexString.ensure(params.queue).hex(),
         HexString.ensure(seed).hex(),
       ],
-      [params.coinType ?? "0x1::aptos_coin::AptosCoin"]
+      [params.coinType ?? "0x2::sui::SUI"]
     );
 
     return [
@@ -1236,7 +999,7 @@ export class OracleAccount {
         client,
         resource_address,
         switchboardAddress,
-        params.coinType ?? "0x1::aptos_coin::AptosCoin"
+        params.coinType ?? "0x2::sui::SUI"
       ),
       tx,
     ];
@@ -1296,14 +1059,14 @@ export class OracleAccount {
     account: AptosAccount,
     params: OracleSaveResultParams[]
   ): Promise<string> {
-    const aggregator_addrs: MaybeHexString[] = [];
-    const oracle_addrs: MaybeHexString[] = [];
+    const aggregator_addrs: string[] = [];
+    const oracle_addrs: string[] = [];
     const oracle_idxs: number[] = [];
     const errors: boolean[] = [];
     const value_nums: string[] = [];
     const value_scale_factors: number[] = [];
     const value_negs: boolean[] = [];
-    const jobs_checksums: MaybeHexString[] = [];
+    const jobs_checksums: string[] = [];
     const min_response_nums: string[] = [];
     const min_response_scale_factors: number[] = [];
     const min_response_negs: boolean[] = [];
@@ -1316,17 +1079,17 @@ export class OracleAccount {
         mantissa: valueMantissa,
         scale: valueScale,
         neg: valueNeg,
-      } = AptosDecimal.fromBig(param.value);
+      } = SuiDecimal.fromBig(param.value);
       const {
         mantissa: minResponseMantissa,
         scale: minResponseScale,
         neg: minResponseNeg,
-      } = AptosDecimal.fromBig(param.minResponse);
+      } = SuiDecimal.fromBig(param.minResponse);
       const {
         mantissa: maxResponseMantissa,
         scale: maxResponseScale,
         neg: maxResponseNeg,
-      } = AptosDecimal.fromBig(param.maxResponse);
+      } = SuiDecimal.fromBig(param.maxResponse);
 
       aggregator_addrs.push(param.aggregatorAddress);
       oracle_addrs.push(param.oracleAddress);
@@ -1366,7 +1129,7 @@ export class OracleAccount {
         max_response_scale_factors.map((scale) => scale),
         max_response_negs.map((neg) => neg),
       ],
-      [this.coinType ?? "0x1::aptos_coin::AptosCoin"],
+      [this.coinType ?? "0x2::sui::SUI"],
       200
     );
   }
@@ -1374,10 +1137,10 @@ export class OracleAccount {
 
 export class OracleQueueAccount {
   constructor(
-    readonly client: AptosClient,
-    readonly address: MaybeHexString,
-    readonly switchboardAddress: MaybeHexString,
-    readonly coinType: MoveStructTag = "0x1::aptos_coin::AptosCoin"
+    readonly provider: JsonRpcProvider,
+    readonly address: string,
+    readonly switchboardAddress: string,
+    readonly coinType: string = "0x2::sui::SUI"
   ) {}
 
   /**
@@ -1387,10 +1150,10 @@ export class OracleQueueAccount {
    * @param params OracleQueueAccount initialization params
    */
   static async init(
-    client: AptosClient,
+    provider: JsonRpcProvider,
     account: AptosAccount,
     params: OracleQueueInitParams,
-    switchboardAddress: MaybeHexString
+    switchboardAddress: string
   ): Promise<[OracleQueueAccount, string]> {
     const tx = await sendAptosTx(
       client,
@@ -1419,7 +1182,7 @@ export class OracleQueueAccount {
         params.open_round_reward ?? 0,
         params.slashing_penalty ?? 0,
       ],
-      [params.coinType ?? "0x1::aptos_coin::AptosCoin"]
+      [params.coinType ?? "0x2::sui::SUI"]
     );
 
     return [
@@ -1427,7 +1190,7 @@ export class OracleQueueAccount {
         client,
         account.address(),
         switchboardAddress,
-        params.coinType ?? "0x1::aptos_coin::AptosCoin"
+        params.coinType ?? "0x2::sui::SUI"
       ),
       tx,
     ];
@@ -1463,14 +1226,14 @@ export class OracleQueueAccount {
         params.open_round_reward ?? 0,
         params.slashing_penalty ?? 0,
       ],
-      [params.coinType ?? "0x1::aptos_coin::AptosCoin"]
+      [params.coinType ?? "0x2::sui::SUI"]
     );
   }
 
   async loadData(): Promise<types.OracleQueue> {
     const queueTypes = new Set([
       `${this.switchboardAddress}::oracle_queue::OracleQueue<${
-        this.coinType ?? "0x1::aptos_coin::AptosCoin"
+        this.coinType ?? "0x2::sui::SUI"
       }>`,
       `${this.switchboardAddress}::oracle_queue::OracleQueueData`,
       `${this.switchboardAddress}::oracle_queue::OracleQueueConfig`,
@@ -1493,10 +1256,10 @@ export class OracleQueueAccount {
  */
 export class LeaseAccount {
   constructor(
-    readonly client: AptosClient,
-    readonly address: MaybeHexString /* aggregator account address */,
-    readonly switchboardAddress: MaybeHexString,
-    readonly coinType: MoveStructTag = "0x1::aptos_coin::AptosCoin"
+    readonly provider: JsonRpcProvider,
+    readonly address: string /* aggregator account address */,
+    readonly switchboardAddress: string,
+    readonly coinType: string = "0x2::sui::SUI"
   ) {}
 
   /**
@@ -1506,10 +1269,10 @@ export class LeaseAccount {
    * @param params LeaseInitParams initialization params
    */
   static async init(
-    client: AptosClient,
+    provider: JsonRpcProvider,
     account: AptosAccount,
     params: LeaseInitParams,
-    switchboardAddress: MaybeHexString
+    switchboardAddress: string
   ): Promise<[LeaseAccount, string]> {
     const tx = await sendAptosTx(
       client,
@@ -1521,7 +1284,7 @@ export class LeaseAccount {
         HexString.ensure(params.withdrawAuthority).hex(),
         params.initialAmount,
       ],
-      [params.coinType ?? "0x1::aptos_coin::AptosCoin"]
+      [params.coinType ?? "0x2::sui::SUI"]
     );
 
     return [
@@ -1529,7 +1292,7 @@ export class LeaseAccount {
         client,
         params.aggregatorAddress,
         switchboardAddress,
-        params.coinType ?? "0x1::aptos_coin::AptosCoin"
+        params.coinType ?? "0x2::sui::SUI"
       ),
       tx,
     ];
@@ -1556,10 +1319,7 @@ export class LeaseAccount {
    * Extend a lease tx
    * @param params CrankPushParams
    */
-  extendTx(
-    account: MaybeHexString,
-    params: LeaseExtendParams
-  ): Types.TransactionPayload {
+  extendTx(account: string, params: LeaseExtendParams): SignableTransaction {
     return getAptosTx(
       `${this.switchboardAddress}::lease_extend_action::run`,
       [HexString.ensure(this.address).hex(), params.loadAmount],
@@ -1593,9 +1353,9 @@ export class LeaseAccount {
    * Pop an aggregator off the Crank
    */
   withdrawTx(
-    account: MaybeHexString,
+    account: string,
     params: LeaseWithdrawParams
-  ): Types.TransactionPayload {
+  ): SignableTransaction {
     return getAptosTx(
       `${this.switchboardAddress}::lease_withdraw_action::run`,
       [
@@ -1628,17 +1388,17 @@ export class LeaseAccount {
     );
   }
 
-  async loadData(queueAddress: MaybeHexString): Promise<types.Escrow> {
+  async loadData(queueAddress: string): Promise<types.Escrow> {
     return await EscrowManager.fetchItem(this, queueAddress);
   }
 }
 
 export class EscrowManager {
   constructor(
-    readonly client: AptosClient,
-    readonly address: MaybeHexString,
-    readonly switchboardAddress: MaybeHexString,
-    readonly coinType: MoveStructTag = "0x1::aptos_coin::AptosCoin"
+    readonly provider: JsonRpcProvider,
+    readonly address: string,
+    readonly switchboardAddress: string,
+    readonly coinType: string = "0x2::sui::SUI"
   ) {}
 
   async loadData(): Promise<types.EscrowManager> {
@@ -1646,7 +1406,7 @@ export class EscrowManager {
       (await this.client.getAccountResource(
         this.address,
         `${this.switchboardAddress}::escrow::EscrowManager<${
-          this.coinType ?? "0x1::aptos_coin::AptosCoin"
+          this.coinType ?? "0x2::sui::SUI"
         }>`
       )) as any
     ).data;
@@ -1654,7 +1414,7 @@ export class EscrowManager {
     return types.EscrowManager.fromMoveStruct(data);
   }
 
-  async fetchItem(queueAddress: MaybeHexString): Promise<types.Escrow> {
+  async fetchItem(queueAddress: string): Promise<types.Escrow> {
     const escrowManagerState = await this.loadData();
 
     const item = await this.client.getTableItem(
@@ -1662,7 +1422,7 @@ export class EscrowManager {
       {
         key_type: `address`,
         value_type: `${this.switchboardAddress}::escrow::Escrow<${
-          this.coinType ?? "0x1::aptos_coin::AptosCoin"
+          this.coinType ?? "0x2::sui::SUI"
         }>`,
         key: HexString.ensure(queueAddress).hex(),
       }
@@ -1673,12 +1433,12 @@ export class EscrowManager {
 
   static async fetchItem<
     T extends {
-      client: AptosClient;
-      address: MaybeHexString;
-      switchboardAddress: MaybeHexString;
+      provider: JsonRpcProvider;
+      address: string;
+      switchboardAddress: string;
       coinType: string;
     }
-  >(account: T, queueAddress: MaybeHexString): Promise<types.Escrow> {
+  >(account: T, queueAddress: string): Promise<types.Escrow> {
     const escrowManager = new EscrowManager(
       account.client,
       account.address,
@@ -1692,10 +1452,10 @@ export class EscrowManager {
 
 export class OracleWallet {
   constructor(
-    readonly client: AptosClient,
-    readonly address: MaybeHexString,
-    readonly switchboardAddress: MaybeHexString,
-    readonly coinType: MoveStructTag = "0x1::aptos_coin::AptosCoin"
+    readonly provider: JsonRpcProvider,
+    readonly address: string,
+    readonly switchboardAddress: string,
+    readonly coinType: string = "0x2::sui::SUI"
   ) {}
 
   /**
@@ -1705,10 +1465,10 @@ export class OracleWallet {
    * @param params OracleWalletInitParams initialization params
    */
   static async init(
-    client: AptosClient,
+    provider: JsonRpcProvider,
     account: AptosAccount,
     params: OracleWalletInitParams,
-    switchboardAddress: MaybeHexString
+    switchboardAddress: string
   ): Promise<[OracleWallet, string]> {
     const tx = await sendAptosTx(
       client,
@@ -1718,7 +1478,7 @@ export class OracleWallet {
         HexString.ensure(params.oracleAddress),
         HexString.ensure(params.queueAddress),
       ],
-      [params.coinType ?? "0x1::aptos_coin::AptosCoin"]
+      [params.coinType ?? "0x2::sui::SUI"]
     );
 
     return [
@@ -1726,7 +1486,7 @@ export class OracleWallet {
         client,
         account.address(),
         switchboardAddress,
-        params.coinType ?? "0x1::aptos_coin::AptosCoin"
+        params.coinType ?? "0x2::sui::SUI"
       ),
       tx,
     ];
@@ -1775,19 +1535,19 @@ export class OracleWallet {
     );
   }
 
-  async loadData(queueAddress: MaybeHexString): Promise<any> {
+  async loadData(queueAddress: string): Promise<any> {
     const handle = (
       (await this.client.getAccountResource(
         this.address,
         `${this.switchboardAddress}::escrow::EscrowManager<${
-          this.coinType ?? "0x1::aptos_coin::AptosCoin"
+          this.coinType ?? "0x2::sui::SUI"
         }>`
       )) as any
     ).data.escrows.handle;
     return await this.client.getTableItem(handle, {
       key_type: `address`,
       value_type: `${this.switchboardAddress}::escrow::Escrow<${
-        this.coinType ?? "0x1::aptos_coin::AptosCoin"
+        this.coinType ?? "0x2::sui::SUI"
       }>`,
       key: HexString.ensure(queueAddress).hex(),
     });
@@ -1796,8 +1556,8 @@ export class OracleWallet {
 
 export class Permission {
   constructor(
-    readonly client: AptosClient,
-    readonly switchboardAddress: MaybeHexString
+    readonly provider: JsonRpcProvider,
+    readonly switchboardAddress: string
   ) {}
 
   /**
@@ -1807,10 +1567,10 @@ export class Permission {
    * @param params PermissionInitParams initialization params
    */
   static async init(
-    client: AptosClient,
+    provider: JsonRpcProvider,
     account: AptosAccount,
     params: PermissionInitParams,
-    switchboardAddress: MaybeHexString
+    switchboardAddress: string
   ): Promise<[Permission, string]> {
     const tx = await sendRawAptosTx(
       client,
@@ -1869,11 +1629,11 @@ interface CreateFeedParams extends AggregatorInitParams {
 interface CreateOracleParams extends OracleInitParams {}
 
 export async function createFeedTx(
-  client: AptosClient,
-  authority: MaybeHexString,
+  provider: JsonRpcProvider,
+  authority: string,
   params: CreateFeedParams,
-  switchboardAddress: MaybeHexString
-): Promise<[AggregatorAccount, Types.TransactionPayload]> {
+  switchboardAddress: string
+): Promise<[AggregatorAccount, SignableTransaction]> {
   const seed = params.seed
     ? HexString.ensure(HexString.ensure(params.seed))
     : new AptosAccount().address();
@@ -1888,7 +1648,7 @@ export async function createFeedTx(
     );
   }
 
-  const { mantissa: vtMantissa, scale: vtScale } = AptosDecimal.fromBig(
+  const { mantissa: vtMantissa, scale: vtScale } = SuiDecimal.fromBig(
     params.varianceThreshold ?? new Big(0)
   );
 
@@ -1912,7 +1672,7 @@ export async function createFeedTx(
       client,
       resource_address,
       switchboardAddress,
-      params.coinType ?? "0x1::aptos_coin::AptosCoin"
+      params.coinType ?? "0x2::sui::SUI"
     ),
     getAptosTx(
       `${switchboardAddress}::create_feed_action::run`,
@@ -1956,17 +1716,17 @@ export async function createFeedTx(
         // seed
         seed.hex(),
       ],
-      [params.coinType ?? "0x1::aptos_coin::AptosCoin"]
+      [params.coinType ?? "0x2::sui::SUI"]
     ),
   ];
 }
 
 // Create a feed with jobs, a lease, then optionally push the lease to the specified crank
 export async function createFeed(
-  client: AptosClient,
+  provider: JsonRpcProvider,
   account: AptosAccount,
   params: CreateFeedParams,
-  switchboardAddress: MaybeHexString
+  switchboardAddress: string
 ): Promise<[AggregatorAccount, string]> {
   const [aggregator, txn] = await createFeedTx(
     client,
@@ -1981,10 +1741,10 @@ export async function createFeed(
 
 // Create an oracle, oracle wallet, permisison, and set the heartbeat permission if user is the queue authority
 export async function createOracle(
-  client: AptosClient,
+  provider: JsonRpcProvider,
   account: AptosAccount,
   params: CreateOracleParams,
-  switchboardAddress: MaybeHexString
+  switchboardAddress: string
 ): Promise<[OracleAccount, string]> {
   const seed = params.seed
     ? HexString.ensure(HexString.ensure(params.seed))
@@ -2005,7 +1765,7 @@ export async function createOracle(
       HexString.ensure(params.queue).hex(),
       seed.hex(),
     ],
-    [params.coinType ?? "0x1::aptos_coin::AptosCoin"]
+    [params.coinType ?? "0x2::sui::SUI"]
   );
 
   return [
@@ -2013,7 +1773,7 @@ export async function createOracle(
       client,
       resource_address,
       switchboardAddress,
-      params.coinType ?? "0x1::aptos_coin::AptosCoin"
+      params.coinType ?? "0x2::sui::SUI"
     ),
     tx,
   ];
@@ -2026,7 +1786,7 @@ export function bcsAddressToBytes(hexStr: HexString): Uint8Array {
 export function generateResourceAccountAddress(
   origin: HexString,
   seed: Uint8Array
-): MaybeHexString {
+): string {
   const hash = SHA3.sha3_256.create();
   const userAddressBCS = bcsAddressToBytes(origin);
   hash.update(userAddressBCS);
@@ -2035,9 +1795,9 @@ export function generateResourceAccountAddress(
 }
 
 export async function fetchAggregators(
-  client: AptosClient,
-  authority: MaybeHexString,
-  switchboardAddress: MaybeHexString
+  provider: JsonRpcProvider,
+  authority: string,
+  switchboardAddress: string
 ): Promise<any[]> {
   const handle = (
     (await client.getAccountResource(
@@ -2052,7 +1812,7 @@ export async function fetchAggregators(
   });
   return (
     await Promise.all(
-      tableItems.map((aggregatorAddress: MaybeHexString) =>
+      tableItems.map((aggregatorAddress: string) =>
         new AggregatorAccount(
           client,
           aggregatorAddress,
