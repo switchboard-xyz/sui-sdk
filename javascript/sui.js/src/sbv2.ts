@@ -1100,6 +1100,7 @@ export class OracleQueueAccount {
         params.save_reward ?? 0,
         params.open_round_reward ?? 0,
         params.slashing_penalty ?? 0,
+        `${Math.floor(Date.now() / 1000)}`,
       ],
       [params.coinType ?? "0x2::sui::SUI"]
     );
@@ -1518,9 +1519,24 @@ export async function createOracle(
   params: CreateOracleParams,
   switchboardAddress: string
 ): Promise<[OracleAccount, SuiExecuteTransactionResponse]> {
+  const balances = await provider.getCoinBalancesOwnedByAddress(
+    signer.getPublicKey().toSuiAddress(),
+    "0x2::sui::SUI"
+  );
+
+  
+  /*
+        name: vector<u8>,
+        metadata: vector<u8>,
+        oracle_authority: address,
+        queue: &mut OracleQueue<CoinType>,
+        load_coin: &mut Coin<CoinType>,
+        load_amount: u64,
+        created_at: u64,
+   */
   const tx = getSuiMoveCall(
     `${switchboardAddress}::create_oracle_action::run`,
-    [params.authority, params.name, params.metadata, params.queue],
+    [params.name, params.metadata, params.authority, params.queue],
     [params.coinType ?? "0x2::sui::SUI"]
   );
 

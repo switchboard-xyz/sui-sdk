@@ -40,9 +40,8 @@ import {
 } from "@mysten/sui.js";
 import * as SHA3 from "js-sha3";
 
-const NODE_URL = "";
-
-const SWITCHBOARD_ADDRESS = "";
+// devnet addr
+const SWITCHBOARD_ADDRESS = "0xbb696dde88bc84d85b77e9b08523547a5ccbc2b0";
 
 const onAggregatorUpdate = (
   client: JsonRpcProvider,
