@@ -168,7 +168,7 @@ export interface AggregatorSetFeedRelayOracleKeys {
 }
 
 export interface CrankInitParams {
-  queueAddress: string;
+  queueObjectId: string;
   coinType: string;
 }
 
@@ -186,7 +186,6 @@ export interface OracleInitParams {
   authority: string;
   queue: string;
   coinType: string;
-  seed?: string;
 }
 
 export interface OracleQueueInitParams {
@@ -252,6 +251,7 @@ export interface LeaseInitParams {
 
 export interface LeaseExtendParams {
   queueAddress: string;
+  loadCoinId: string;
   loadAmount: number;
 }
 
@@ -263,12 +263,6 @@ export interface LeaseWithdrawParams {
 export interface LeaseSetAuthorityParams {
   queueAddress: string;
   authority: string;
-}
-
-export interface EscrowInitParams {
-  oracleAddress: string;
-  queueAddress: string;
-  coinType: string;
 }
 
 export interface EscrowContributeParams {
@@ -304,6 +298,18 @@ export interface PermissionSetParams {
 export type EventCallback = (
   e: any
 ) => Promise<void> /** | (() => Promise<void>) */;
+
+// Cleanup for loadData
+const replaceObj = (obj: any) => {
+  for (let i in obj) {
+    if (typeof obj[i] === "object") {
+      replaceObj(obj[i]);
+      if ("fields" in obj[i]) {
+        obj[i] = obj[i].fields;
+      }
+    }
+  }
+};
 
 /**
  * Sends and waits for an aptos tx to be confirmed
@@ -403,21 +409,12 @@ export class AggregatorAccount {
 
   async loadData(): Promise<any> {
     const result = await this.provider.getObject(this.address);
-    const childResults = await this.provider.getObjectsOwnedByAddress(
-      this.address
-    );
-    const childFields = (
-      await Promise.all(
-        childResults.map(async (res) => {
-          const data = await this.provider.getObject(res.objectId);
-          return getObjectFields(data);
-        })
-      )
-    ).reduce((obj, curr) => ({ ...obj, ...curr }), {});
+    const childFields = await getDynamicChildren(this.provider, this.address);
     const agg = {
       ...childFields,
       ...getObjectFields(result),
     };
+    replaceObj(agg);
     return agg;
   }
 
@@ -485,15 +482,21 @@ export class AggregatorAccount {
 
     if ("EffectsCert" in result) {
       const txEffects = result.EffectsCert.effects.effects;
-      const aggId = txEffects.sharedObjects.pop();
-      if (!aggId) {
-        return;
-      }
+      let aggId: string;
+      txEffects.events.forEach((obj) => {
+        if (
+          "newObject" in obj &&
+          obj.newObject.objectType ===
+            `${switchboardAddress}::aggregator::Aggregator`
+        ) {
+          aggId = obj.newObject.objectId;
+        }
+      });
 
       return [
         new AggregatorAccount(
           provider,
-          aggId.objectId,
+          aggId,
           switchboardAddress,
           params.coinType ?? "0x2::sui::SUI"
         ),
@@ -506,6 +509,7 @@ export class AggregatorAccount {
 
   async latestValue(): Promise<number> {
     const data = await this.loadData();
+    replaceObj(data);
     return new SuiDecimal(
       data.latestConfirmedRound.result.value.toString(),
       data.latestConfirmedRound.result.dec,
@@ -604,9 +608,10 @@ export class AggregatorAccount {
     signer: Keypair,
     jitter?: number
   ): Promise<SuiExecuteTransactionResponse> {
+    const aggregatorData = await this.loadData();
     const tx = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_open_round_action::run`,
-      [this.address, jitter ?? 1],
+      [this.address, aggregatorData.queue_addr, jitter ?? 1],
       [this.coinType]
     );
 
@@ -617,10 +622,16 @@ export class AggregatorAccount {
     });
   }
 
-  openRoundTx(): SignableTransaction {
+  async openRoundTx(): Promise<SignableTransaction> {
+    const aggregatorData = await this.loadData();
     const txData = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_open_round_action::run`,
-      [this.address, 1],
+      [
+        this.address,
+        aggregatorData.queue_addr,
+        1,
+        Math.floor(Date.now() / 1000),
+      ],
       [this.coinType ?? "0x2::sui::SUI"]
     );
     return {
@@ -642,26 +653,25 @@ export class AggregatorAccount {
         this.address,
         params.name ?? aggregator.name,
         params.metadata ?? aggregator.metadata,
-        params.queueAddress ?? aggregator.queueAddr,
-        params.crankAddress ?? aggregator.crankAddr,
-        params.batchSize ?? aggregator.batchSize.toNumber(),
-        params.minOracleResults ?? aggregator.minOracleResults.toNumber(),
-        params.minJobResults ?? aggregator.minJobResults.toNumber(),
-        params.minUpdateDelaySeconds ??
-          aggregator.minUpdateDelaySeconds.toNumber(),
-        params.startAfter ?? aggregator.startAfter.toNumber(),
+        params.queueAddress ?? aggregator.queue_addr,
+        params.crankAddress ?? aggregator.crank_addr,
+        params.batchSize ?? aggregator.batch_size,
+        params.minOracleResults ?? aggregator.min_oracle_results,
+        params.minJobResults ?? aggregator.min_job_results,
+        params.minUpdateDelaySeconds ?? aggregator.min_update_delay_seconds,
+        params.startAfter ?? aggregator.start_after,
         params.varianceThreshold
           ? vtMantissa
-          : aggregator.varianceThreshold.value.toString(),
-        params.varianceThreshold ? vtScale : aggregator.varianceThreshold.dec,
-        params.forceReportPeriod ?? aggregator.forceReportPeriod.toNumber(),
-        params.expiration ?? aggregator.expiration.toNumber(), // @ts-ignore
-        params.disableCrank ?? false, // @ts-ignore
-        params.historySize ?? 0, // @ts-ignore
-        params.readCharge ?? aggregator.readCharge.toNumber(),
-        params.rewardEscrow ? params.rewardEscrow : aggregator.rewardEscrow,
-        params.readWhitelist ?? aggregator.readWhitelist,
-        params.limitReadsToWhitelist ?? aggregator.limitReadsToWhitelist,
+          : aggregator.variance_threshold.value,
+        params.varianceThreshold ? vtScale : aggregator.variance_threshold.dec,
+        params.forceReportPeriod ?? aggregator.force_report_period,
+        params.expiration ?? aggregator.expiration, // @ts-ignore
+        params.disableCrank ?? aggregator.disable_crank, // @ts-ignore
+        params.historySize ?? aggregator.history_limit, // @ts-ignore
+        params.readCharge ?? aggregator.read_charge,
+        params.rewardEscrow ? params.rewardEscrow : aggregator.reward_escrow,
+        params.readWhitelist ?? aggregator.read_whitelist,
+        params.limitReadsToWhitelist ?? aggregator.limit_reads_to_whitelist,
         params.authority ?? aggregator.authority,
       ],
       [params.coinType ?? "0x2::sui::SUI"] // TODO
@@ -827,15 +837,17 @@ export class JobAccount {
 
     if ("EffectsCert" in result) {
       const txEffects = result.EffectsCert.effects.effects;
-      const jobId = txEffects.sharedObjects.pop();
-      if (!jobId) {
-        return;
-      }
+      let jobId: string;
+      txEffects.events.forEach((obj) => {
+        if (
+          "newObject" in obj &&
+          obj.newObject.objectType === `${switchboardAddress}::job::Job`
+        ) {
+          jobId = obj.newObject.objectId;
+        }
+      });
 
-      return [
-        new JobAccount(provider, jobId.objectId, switchboardAddress),
-        result,
-      ];
+      return [new JobAccount(provider, jobId, switchboardAddress), result];
     }
 
     throw new Error("No Job Data Created.");
@@ -886,10 +898,9 @@ export class CrankAccount {
   ): Promise<[CrankAccount, SuiExecuteTransactionResponse]> {
     const txData = getSuiMoveCall(
       `${switchboardAddress}::crank_init_action::run`,
-      [params.queueAddress],
+      [params.queueObjectId, Math.floor(Date.now() / 1000)],
       [params.coinType ?? "0x2::sui::SUI"]
     );
-
     const signerWithProvider = new RawSigner(signer, provider);
     const result = await sendSuiTx(signerWithProvider, {
       kind: "moveCall",
@@ -898,15 +909,16 @@ export class CrankAccount {
 
     if ("EffectsCert" in result) {
       const txEffects = result.EffectsCert.effects.effects;
-      const crankId = txEffects.sharedObjects.pop();
-      if (!crankId) {
-        return;
-      }
-
-      return [
-        new CrankAccount(provider, crankId.objectId, switchboardAddress),
-        result,
-      ];
+      let crankId: string;
+      txEffects.events.forEach((obj) => {
+        if (
+          "newObject" in obj &&
+          obj.newObject.objectType === `${switchboardAddress}::crank::Crank`
+        ) {
+          crankId = obj.newObject.objectId;
+        }
+      });
+      return [new CrankAccount(provider, crankId, switchboardAddress), result];
     }
 
     throw new Error("No Job Data Created.");
@@ -965,6 +977,7 @@ export class CrankAccount {
   async loadData(): Promise<any> {
     const result = await this.provider.getObject(this.address);
     const crank = getObjectFields(result);
+    replaceObj(crank);
     return { ...crank };
   }
 }
@@ -1003,15 +1016,20 @@ export class OracleAccount {
 
     if ("EffectsCert" in result) {
       const txEffects = result.EffectsCert.effects.effects;
-      const oracleId = txEffects.sharedObjects.pop();
-      if (!oracleId) {
-        return;
-      }
+      let oracleId: string;
+      txEffects.events.forEach((obj) => {
+        if (
+          "newObject" in obj &&
+          obj.newObject.objectType === `${switchboardAddress}::oracle::Oracle`
+        ) {
+          oracleId = obj.newObject.objectId;
+        }
+      });
 
       return [
         new OracleAccount(
           provider,
-          oracleId.objectId,
+          oracleId,
           switchboardAddress,
           params.coinType ?? "0x2::sui::SUI"
         ),
@@ -1024,31 +1042,31 @@ export class OracleAccount {
 
   async loadData(): Promise<any> {
     const result = await this.provider.getObject(this.address);
-    const childResults = await this.provider.getObjectsOwnedByAddress(
-      this.address
-    );
-    const childFields = (
-      await Promise.all(
-        childResults.map(async (res) => {
-          const data = await this.provider.getObject(res.objectId);
-          return getObjectFields(data);
-        })
-      )
-    ).reduce((obj, curr) => ({ ...obj, ...curr }), {});
+    const childFields = await getDynamicChildren(this.provider, this.address);
     const oracleData = {
       ...childFields,
       ...getObjectFields(result),
     };
+    replaceObj(oracleData);
     return oracleData;
   }
 
   /**
    * Oracle Heartbeat Action
    */
-  async heartbeat(signer: Keypair): Promise<SuiExecuteTransactionResponse> {
+  async heartbeat(
+    signer: Keypair,
+    queueId: string
+  ): Promise<SuiExecuteTransactionResponse> {
+    /**  
+        oracle: &mut Oracle,         
+        oracle_queue: &mut OracleQueue<CoinType>,
+        now: u64,
+        ctx: &mut TxContext,
+     */
     const tx = getSuiMoveCall(
       `${this.switchboardAddress}::oracle_heartbeat_action::run`,
-      [this.address],
+      [this.address, queueId, Math.floor(Date.now() / 1000)],
       [this.coinType]
     );
     const signerWithProvider = new RawSigner(signer, this.provider);
@@ -1086,7 +1104,7 @@ export class OracleQueueAccount {
         params.reward,
         params.minStake,
         params.slashingEnabled,
-        params.varianceToleranceMultiplierValue,
+        `${params.varianceToleranceMultiplierValue}`,
         params.varianceToleranceMultiplierScale,
         params.feedProbationPeriod,
         params.consecutiveFeedFailureLimit,
@@ -1113,7 +1131,16 @@ export class OracleQueueAccount {
 
     if ("EffectsCert" in result) {
       const txEffects = result.EffectsCert.effects.effects;
-      const queueId = txEffects.sharedObjects.pop();
+      let queueId: string;
+      txEffects.events.forEach((obj) => {
+        if (
+          "newObject" in obj &&
+          obj.newObject.objectType ===
+            `${switchboardAddress}::oracle_queue::OracleQueue<0x2::sui::SUI>`
+        ) {
+          queueId = obj.newObject.objectId;
+        }
+      });
       if (!queueId) {
         return;
       }
@@ -1121,7 +1148,7 @@ export class OracleQueueAccount {
       return [
         new OracleQueueAccount(
           provider,
-          queueId.objectId,
+          queueId,
           switchboardAddress,
           params.coinType ?? "0x2::sui::SUI"
         ),
@@ -1171,21 +1198,12 @@ export class OracleQueueAccount {
 
   async loadData(): Promise<any> {
     const result = await this.provider.getObject(this.address);
-    const childResults = await this.provider.getObjectsOwnedByAddress(
-      this.address
-    );
-    const childFields = (
-      await Promise.all(
-        childResults.map(async (res) => {
-          const data = await this.provider.getObject(res.objectId);
-          return getObjectFields(data);
-        })
-      )
-    ).reduce((obj, curr) => ({ ...obj, ...curr }), {});
+    const childFields = await getDynamicChildren(this.provider, this.address);
     const queueData = {
       ...childFields,
       ...getObjectFields(result),
     };
+    replaceObj(queueData);
     return queueData;
   }
 }
@@ -1305,7 +1323,7 @@ export class Permission {
 
   async loadData(): Promise<any> {
     const result = await this.provider.getObject(this.objectId);
-    const childResults = await this.provider.getObjectsOwnedByAddress(
+    const childResults = await this.provider.getObjectsOwnedByObject(
       this.objectId
     );
     const childFields = (
@@ -1320,6 +1338,7 @@ export class Permission {
       ...childFields,
       ...getObjectFields(result),
     };
+    replaceObj(queueData);
     return queueData;
   }
 
@@ -1347,8 +1366,17 @@ export class Permission {
 
     if ("EffectsCert" in result) {
       const txEffects = result.EffectsCert.effects.effects;
-      const permissionId = txEffects.created.pop();
-      if (!permissionId) {
+      let permisisonId: string;
+      txEffects.events.forEach((obj) => {
+        if (
+          "newObject" in obj &&
+          obj.newObject.objectType ===
+            `${switchboardAddress}::permission::Permission`
+        ) {
+          permisisonId = obj.newObject.objectId;
+        }
+      });
+      if (!permisisonId) {
         return;
       }
 
@@ -1357,7 +1385,7 @@ export class Permission {
           provider,
           params.queueId,
           params.objectId,
-          permissionId.reference.objectId,
+          permisisonId,
           switchboardAddress,
           coinType ?? "0x2::sui::SUI"
         ),
@@ -1405,10 +1433,14 @@ function safeDiv(number_: Big, denominator: Big, decimals = 20): Big {
 
 interface CreateFeedParams extends AggregatorInitParams {
   jobs: JobInitParams[];
+  loadCoin: string;
   initialLoadAmount: number;
 }
 
-interface CreateOracleParams extends OracleInitParams {}
+interface CreateOracleParams extends OracleInitParams {
+  loadCoin: string;
+  loadAmount: number;
+}
 
 export async function createFeedTx(
   params: CreateFeedParams,
@@ -1443,17 +1475,18 @@ export async function createFeedTx(
       [
         // authority will own everything
         params.authority,
-
+        `${Math.floor(Date.now() / 1000)}`,
         // aggregator
         params.name ?? "",
         params.metadata ?? "",
         params.queueAddress,
+        params.crankAddress,
         params.batchSize,
         params.minOracleResults,
         params.minJobResults,
         params.minUpdateDelaySeconds,
         params.startAfter ?? 0,
-        Number(vtMantissa),
+        vtMantissa,
         vtScale,
         params.forceReportPeriod ?? 0,
         params.expiration ?? 0,
@@ -1465,19 +1498,51 @@ export async function createFeedTx(
         params.limitReadsToWhitelist ?? false,
 
         // lease
+        params.loadCoin,
         params.initialLoadAmount,
 
         // jobs
         ...jobs.flatMap((jip) => {
           return [jip.name, jip.metadata, jip.data, jip.weight || 1];
         }),
-
-        // crank
-        params.crankAddress,
       ],
       [params.coinType ?? "0x2::sui::SUI"]
     ),
   };
+
+  /**
+
+
+        authority: address,
+        created_at: u64,
+
+        // Aggregator
+        name: vector<u8>,
+        metadata: vector<u8>,
+        queue: &mut OracleQueue<CoinType>,
+        crank: &mut Crank,
+        batch_size: u64,
+        min_oracle_results: u64,
+        min_job_results: u64,
+        min_update_delay_seconds: u64,
+        start_after: u64,
+        variance_threshold_value: u128, 
+        variance_threshold_scale: u8, 
+        force_report_period: u64,
+        expiration: u64,
+        disable_crank: bool,
+        history_limit: u64,
+        read_charge: u64,
+        reward_escrow: address,
+        read_whitelist: vector<address>,
+        limit_reads_to_whitelist: bool,
+
+        // Lease
+        load_coin: &mut Coin<CoinType>,
+        load_amount: u64,
+
+   * 
+   */
 }
 
 // Create a feed with jobs, a lease, then optionally push the lease to the specified crank
@@ -1493,15 +1558,20 @@ export async function createFeed(
 
   if ("EffectsCert" in result) {
     const txEffects = result.EffectsCert.effects.effects;
-    const aggId = txEffects.sharedObjects.pop();
-    if (!aggId) {
-      return;
-    }
-
+    let aggId: string;
+    txEffects.events.forEach((obj) => {
+      if (
+        "newObject" in obj &&
+        obj.newObject.objectType ===
+          `${switchboardAddress}::aggregator::Aggregator`
+      ) {
+        aggId = obj.newObject.objectId;
+      }
+    });
     return [
       new AggregatorAccount(
         provider,
-        aggId.objectId,
+        aggId,
         switchboardAddress,
         params.coinType ?? "0x2::sui::SUI"
       ),
@@ -1519,24 +1589,17 @@ export async function createOracle(
   params: CreateOracleParams,
   switchboardAddress: string
 ): Promise<[OracleAccount, SuiExecuteTransactionResponse]> {
-  const balances = await provider.getCoinBalancesOwnedByAddress(
-    signer.getPublicKey().toSuiAddress(),
-    "0x2::sui::SUI"
-  );
-
-  
-  /*
-        name: vector<u8>,
-        metadata: vector<u8>,
-        oracle_authority: address,
-        queue: &mut OracleQueue<CoinType>,
-        load_coin: &mut Coin<CoinType>,
-        load_amount: u64,
-        created_at: u64,
-   */
   const tx = getSuiMoveCall(
     `${switchboardAddress}::create_oracle_action::run`,
-    [params.name, params.metadata, params.authority, params.queue],
+    [
+      params.name,
+      params.metadata,
+      params.authority,
+      params.queue,
+      params.loadCoin,
+      params.loadAmount,
+      Math.floor(Date.now() / 1000),
+    ],
     [params.coinType ?? "0x2::sui::SUI"]
   );
 
@@ -1548,15 +1611,19 @@ export async function createOracle(
 
   if ("EffectsCert" in result) {
     const txEffects = result.EffectsCert.effects.effects;
-    const oracleId = txEffects.sharedObjects.pop();
-    if (!oracleId) {
-      return;
-    }
-
+    let oracleId: string;
+    txEffects.events.forEach((obj) => {
+      if (
+        "newObject" in obj &&
+        obj.newObject.objectType === `${switchboardAddress}::oracle::Oracle`
+      ) {
+        oracleId = obj.newObject.objectId;
+      }
+    });
     return [
       new OracleAccount(
         provider,
-        oracleId.objectId,
+        oracleId,
         switchboardAddress,
         params.coinType ?? "0x2::sui::SUI"
       ),
@@ -1565,4 +1632,28 @@ export async function createOracle(
   }
 
   throw new Error("No oracle data created by create feed fn.");
+}
+
+async function getDynamicChildren(provider: JsonRpcProvider, objectId: string) {
+  const childResults = await provider.getObjectsOwnedByObject(objectId);
+  const children = await Promise.all(
+    childResults.map(async (res) => {
+      const data = await provider.getObject(res.objectId);
+      return getObjectFields(data);
+    })
+  );
+  const r = await Promise.all(
+    children.map(async (res) => {
+      const fieldName = Buffer.from(res.name.fields.name, "base64").toString();
+      const data = await provider.getObject(res.value);
+      return { [fieldName]: getObjectFields(data) };
+    })
+  );
+  const data = r.reduce((prev, curr) => {
+    return {
+      ...curr,
+      ...prev,
+    };
+  }, {});
+  return data;
 }

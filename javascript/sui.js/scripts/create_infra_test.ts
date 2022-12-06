@@ -39,9 +39,10 @@ import {
   Keypair,
 } from "@mysten/sui.js";
 import * as SHA3 from "js-sha3";
+import * as fs from "fs";
 
 // devnet addr
-const SWITCHBOARD_ADDRESS = "0xbb696dde88bc84d85b77e9b08523547a5ccbc2b0";
+const SWITCHBOARD_ADDRESS = "0x17408e6e3d6e4e1abeba9e4f4d4d067e2f402d6a";
 
 const onAggregatorUpdate = (
   client: JsonRpcProvider,
@@ -76,19 +77,47 @@ const onAggregatorOpenRound = (
   // connect to Devnet
   const provider = new JsonRpcProvider(Network.DEVNET);
 
-  // create new user
-  const keypair = new Ed25519Keypair();
-  const userAddress = keypair.getPublicKey().toSuiAddress();
+  let keypair: Ed25519Keypair | null = null;
 
-  // get tokens from the DevNet faucet server
-  await provider.requestSuiFromFaucet(keypair.getPublicKey().toSuiAddress());
+  // if file extension ends with yaml
+  try {
+    const parsed = fs.readFileSync("./sui-keypair.json", {
+      encoding: "hex",
+    });
+    console.log(parsed);
+    keypair = Ed25519Keypair.fromSecretKey(Buffer.from(parsed, "hex"));
+  } catch (_e) {
+    keypair = new Ed25519Keypair();
+    fs.writeFileSync(
+      "./sui-keypair.json",
+      // @ts-ignore
+      keypair.keypair.secretKey,
+      { encoding: "hex" }
+    );
+  }
+
+  // create new user
+  const userAddress = `0x${keypair.getPublicKey().toSuiAddress()}`;
+
+  try {
+    // get tokens from the DevNet faucet server
+    await provider.requestSuiFromFaucet(keypair.getPublicKey().toSuiAddress());
+  } catch (e) {}
 
   console.log(`User account ${userAddress} created + funded.`);
+
+  const coins = await provider.selectCoinsWithBalanceGreaterThanOrEqual(
+    userAddress,
+    BigInt(1000)
+  );
+
+  const coin: any = coins.pop();
+
   const [queue, queueTxHash] = await OracleQueueAccount.init(
     provider,
     keypair,
     {
-      name: "switchboard unermissioned queue",
+      name: "switchboard unpermissioned queue",
       metadata: "running",
       authority: userAddress,
       oracleTimeout: 3000,
@@ -105,7 +134,7 @@ const onAggregatorOpenRound = (
       lockLeaseFunding: false,
       enableBufferRelayers: false,
       maxSize: 1000,
-      coinType: "0x1::aptos_coin::AptosCoin",
+      coinType: "0x2::sui::SUI",
     },
     SWITCHBOARD_ADDRESS
   );
@@ -118,20 +147,22 @@ const onAggregatorOpenRound = (
       name: "Switchboard OracleAccount",
       authority: userAddress,
       metadata: "metadata",
-      queue: queue.address,
-      coinType: "0x1::aptos_coin::AptosCoin",
+      queue: queue.address, //
+      loadCoin: coin.details.reference.objectId,
+      loadAmount: 0,
+      coinType: "0x2::sui::SUI",
     },
     SWITCHBOARD_ADDRESS
   );
   console.log(await oracle.loadData());
   console.log(`Oracle ${oracle.address} created. tx hash: ${oracleTxHash}`);
   // first heartbeat
-  const heartbeatTxHash = await oracle.heartbeat(keypair);
+  const heartbeatTxHash = await oracle.heartbeat(keypair, queue.address);
   console.log("First Heartbeat Tx Hash:", heartbeatTxHash);
   // heartbeat every 30 seconds
   setInterval(async () => {
     try {
-      const heartbeatTxHash = await oracle.heartbeat(keypair);
+      const heartbeatTxHash = await oracle.heartbeat(keypair, queue.address);
       console.log("Heartbeat Tx Hash:", heartbeatTxHash);
     } catch (e) {
       console.log("failed heartbeat");
@@ -142,8 +173,8 @@ const onAggregatorOpenRound = (
     provider,
     keypair,
     {
-      queueAddress: queue.address,
-      coinType: "0x1::aptos_coin::AptosCoin",
+      queueObjectId: queue.address,
+      coinType: "0x2::sui::SUI",
     },
     SWITCHBOARD_ADDRESS
   );
@@ -182,8 +213,9 @@ const onAggregatorOpenRound = (
       forceReportPeriod: 0,
       expiration: 0,
       coinType: "0x2::sui::SUI",
-      crankAddress: userAddress,
-      initialLoadAmount: 1000,
+      crankAddress: crank.address,
+      initialLoadAmount: 1,
+      loadCoin: coin.details.reference.objectId,
       jobs: [
         {
           name: "BTC/USD",
