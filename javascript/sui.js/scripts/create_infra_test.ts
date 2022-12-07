@@ -46,37 +46,42 @@ const SWITCHBOARD_ADDRESS = "0x17408e6e3d6e4e1abeba9e4f4d4d067e2f402d6a";
 
 const onAggregatorUpdate = (
   client: JsonRpcProvider,
-  cb: EventCallback,
-  pollIntervalMs: number = 1000
+  cb: EventCallback
 ): SuiEvent => {
   return AggregatorAccount.watch(
-    client,
+    new JsonRpcProvider("wss://pubsub.devnet.sui.io:443"),
     SWITCHBOARD_ADDRESS,
-    cb,
-    pollIntervalMs
+    cb
   );
 };
 
-const onAggregatorOpenRound = (
-  client: JsonRpcProvider,
-  cb: EventCallback,
-  pollIntervalMs: number = 1000
-) => {
+const updateEventListener = onAggregatorUpdate(
+  new JsonRpcProvider("wss://pubsub.devnet.sui.io:443"),
+  async (e) => {
+    console.log(`NEW RESULT:`, e);
+  }
+);
+
+function onAggregatorOpenRound(
+  provider: JsonRpcProvider,
+  callback: EventCallback
+): SuiEvent {
   const event = new SuiEvent(
-    client,
+    provider,
     SWITCHBOARD_ADDRESS,
-    `events`,
-    "AggregatorOpenRoundEvent"
+    `aggregator_open_round_action`,
+    `${SWITCHBOARD_ADDRESS}::events::AggregatorOpenRoundEvent`
   );
-  event.onTrigger(cb);
+  event.onTrigger(callback);
   return event;
-};
+}
+
+let openRoundEventListener: SuiEvent;
 
 // run it all at once
 (async () => {
   // connect to Devnet
   const provider = new JsonRpcProvider(Network.DEVNET);
-
   let keypair: Ed25519Keypair | null = null;
 
   // if file extension ends with yaml
@@ -121,7 +126,7 @@ const onAggregatorOpenRound = (
       metadata: "running",
       authority: userAddress,
       oracleTimeout: 3000,
-      reward: 1,
+      reward: 0,
       minStake: 0,
       slashingEnabled: false,
       varianceToleranceMultiplierValue: 0,
@@ -221,7 +226,7 @@ const onAggregatorOpenRound = (
           name: "BTC/USD",
           metadata: "binance",
           authority: userAddress,
-          data: serializedJob1.toString("base64"),
+          data: Array.from(serializedJob1),
           weight: 1,
         },
       ],
@@ -231,59 +236,63 @@ const onAggregatorOpenRound = (
   console.log(
     `Created AggregatorAccount and LeaseAccount resources at account address ${aggregator.address}. Tx hash ${createFeedTx}`
   );
-  const updatePoller = onAggregatorUpdate(provider, async (e) => {
-    console.log(`NEW RESULT:`, e.data);
-  });
-  const onOpenRoundPoller = onAggregatorOpenRound(provider, async (e) => {
-    console.log(e);
-    try {
-      // only handle updates for this aggregator
-      if (e.data.aggregator_address !== aggregator.address) {
-        return;
-      }
-      const agg = new AggregatorAccount(
-        provider,
-        e.data.aggregator_address,
-        SWITCHBOARD_ADDRESS
-      );
-      const aggregatorData = await agg.loadData();
-      // The event data includes JobAccount Pubkeys, so grab the JobAccount Data
-      const jobs: OracleJob[] = await Promise.all(
-        e.data.job_keys.map(async (jobKey: string) => {
-          const job = new JobAccount(provider, jobKey, SWITCHBOARD_ADDRESS);
-          const jobData = await job.loadJob().catch((e) => {
-            console.log(e);
-          });
-          return jobData;
-        })
-      );
-      // simulate a fetch
-      const response = await fetch(`https://api.switchboard.xyz/api/test`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobs }),
-      });
-      if (!response.ok) console.error(`[Task runner] Error testing jobs json.`);
+
+  openRoundEventListener = onAggregatorOpenRound(
+    new JsonRpcProvider("wss://pubsub.devnet.sui.io:443"),
+    async (e) => {
       try {
-        const json = await response.json();
-        // try save result
-        const tx = await aggregator.saveResult(keypair, {
-          oracleAddress: oracle.address,
-          oracleIdx: 0,
-          error: false,
-          value: new Big(json.result),
-          jobsChecksum: Buffer.from(aggregatorData.jobsChecksum).toString(
-            "hex"
-          ),
-          minResponse: new Big(json.result),
-          maxResponse: new Big(json.result),
+        const data = e.event.moveEvent.fields;
+
+        // only handle updates for this aggregator
+        if (data.aggregator_address !== aggregator.address) {
+          return;
+        }
+        const agg = new AggregatorAccount(
+          provider,
+          data.aggregator_address,
+          SWITCHBOARD_ADDRESS
+        );
+        const aggregatorData = await agg.loadData();
+        // The event data includes JobAccount Pubkeys, so grab the JobAccount Data
+        const jobs: OracleJob[] = await Promise.all(
+          data.job_keys.map(async (jobKey: string) => {
+            const job = new JobAccount(provider, jobKey, SWITCHBOARD_ADDRESS);
+            const jobData = await job.loadJob().catch((e) => {
+              console.log(e);
+            });
+            return jobData;
+          })
+        );
+        // simulate a fetch
+        const response = await fetch(`https://api.switchboard.xyz/api/test`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobs }),
         });
-        console.log("save result tx:", tx);
-      } catch (e) {} // errors will happen when task runner returns them
-    } catch (e) {
-      console.log("open round resp fail");
+        if (!response.ok)
+          console.error(`[Task runner] Error testing jobs json.`);
+        try {
+          const json = await response.json();
+          // try save result
+          const tx = await aggregator.saveResult(keypair, {
+            oracleAddress: oracle.address,
+            queueAddress: queue.address,
+            oracleIdx: 0,
+            error: false,
+            value: new Big(json.result),
+            jobsChecksum: aggregatorData.job_data.jobs_checksum,
+            minResponse: new Big(json.result),
+            maxResponse: new Big(json.result),
+          });
+          console.log("save result tx:", tx);
+        } catch (e) {
+          console.log(e);
+        } // errors will happen when task runner returns them
+      } catch (e) {
+        console.log("open round resp fail");
+      }
     }
-  });
+  );
   /**
    * Log Data Objects
    */
@@ -302,3 +311,6 @@ const onAggregatorOpenRound = (
     }
   }, 10000);
 })();
+
+// run until exited
+const t = setInterval(() => {}, 30000);

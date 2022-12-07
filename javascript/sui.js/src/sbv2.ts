@@ -108,6 +108,7 @@ export interface AggregatorSaveResultParams {
   oracleAddress: string;
   oracleIdx: number;
   error: boolean;
+  queueAddress: string;
   // this should probably be automatically generated
   value: Big;
   jobsChecksum: string;
@@ -123,7 +124,7 @@ export interface JobInitParams {
   name: string;
   metadata: string;
   authority: string;
-  data: string;
+  data: string | any[];
   weight?: number;
 }
 
@@ -304,7 +305,7 @@ const replaceObj = (obj: any) => {
   for (let i in obj) {
     if (typeof obj[i] === "object") {
       replaceObj(obj[i]);
-      if ("fields" in obj[i]) {
+      if (obj[i] && "fields" in obj[i]) {
         obj[i] = obj[i].fields;
       }
     }
@@ -359,7 +360,7 @@ export function getSuiMoveCall(
 }
 
 /**
- * Poll Events on Sui
+ * Events on Sui
  */
 export class SuiEvent {
   intervalId?: SubscriptionId;
@@ -420,7 +421,7 @@ export class AggregatorAccount {
 
   async loadJobs(): Promise<Array<OracleJob>> {
     const data = await this.loadData();
-    const jobs = data.jobKeys.map(
+    const jobs = data.job_data.job_keys.map(
       (key: any) => new JobAccount(this.provider, key, this.switchboardAddress)
     );
     const promises: Array<Promise<OracleJob>> = [];
@@ -575,27 +576,49 @@ export class AggregatorAccount {
       scale: maxResponseScale,
       neg: maxResponseNeg,
     } = SuiDecimal.fromBig(params.maxResponse);
-
     const tx = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_save_result_action::run`,
       [
         params.oracleAddress,
         this.address,
+        params.queueAddress,
         params.oracleIdx,
         params.error,
         valueMantissa,
         valueScale,
         valueNeg,
-        params.jobsChecksum,
+        [...Buffer.from(params.jobsChecksum, "base64")],
         minResponseMantissa,
         minResponseScale,
         minResponseNeg,
         maxResponseMantissa,
         maxResponseScale,
         maxResponseNeg,
+        Math.floor(Date.now() / 1000),
       ],
       [this.coinType ?? "0x2::sui::SUI"]
     );
+
+    /* 
+    
+        oracle: &mut Oracle,
+        aggregator: &mut Aggregator,
+        oracle_queue: &mut OracleQueue<CoinType>,
+        oracle_idx: u64,
+        error: bool,
+        value_num: u128,
+        value_scale_factor: u8, // scale factor
+        value_neg: bool,
+        jobs_checksum: vector<u8>,
+        min_response_num: u128,
+        min_response_scale_factor: u8,
+        min_response_neg: bool,
+        max_response_num: u128,
+        max_response_scale_factor: u8,
+        max_response_neg: bool,
+        now: u64,
+        ctx: &mut TxContext,
+    */
 
     const signerWithProvider = new RawSigner(signer, this.provider);
     return sendSuiTx(signerWithProvider, {
@@ -611,7 +634,12 @@ export class AggregatorAccount {
     const aggregatorData = await this.loadData();
     const tx = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_open_round_action::run`,
-      [this.address, aggregatorData.queue_addr, jitter ?? 1],
+      [
+        this.address,
+        aggregatorData.queue_addr,
+        jitter ?? 1,
+        Math.floor(Date.now()),
+      ],
       [this.coinType]
     );
 
@@ -731,15 +759,15 @@ export class AggregatorAccount {
   static watch(
     provider: JsonRpcProvider,
     switchboardAddress: string,
-    callback: EventCallback,
-    pollingIntervalMs = 1000
+    callback: EventCallback
   ): SuiEvent {
     const event = new SuiEvent(
       provider,
       switchboardAddress,
-      `${switchboardAddress}::switchboard::State`,
-      "aggregator_update_events"
+      `events`,
+      `${switchboardAddress}::events::AggregatorUpdateEvent`
     );
+
     event.onTrigger(callback);
     return event;
   }
@@ -801,13 +829,10 @@ export class JobAccount {
     const job = getObjectFields(result);
     return { ...job };
   }
+
   async loadJob(): Promise<OracleJob> {
     const data = await this.loadData();
-
-    // TODO: Fix this
-    const job = OracleJob.decodeDelimited(
-      Buffer.from(Buffer.from(data.data).toString(), "base64")
-    );
+    const job = OracleJob.decodeDelimited(Buffer.from(data.data, "base64"));
     return job;
   }
 
@@ -1462,7 +1487,7 @@ export async function createFeedTx(
             name: "",
             metadata: "",
             authority: "",
-            data: "",
+            data: [],
             weight: 1,
           }),
         ]
@@ -1509,40 +1534,6 @@ export async function createFeedTx(
       [params.coinType ?? "0x2::sui::SUI"]
     ),
   };
-
-  /**
-
-
-        authority: address,
-        created_at: u64,
-
-        // Aggregator
-        name: vector<u8>,
-        metadata: vector<u8>,
-        queue: &mut OracleQueue<CoinType>,
-        crank: &mut Crank,
-        batch_size: u64,
-        min_oracle_results: u64,
-        min_job_results: u64,
-        min_update_delay_seconds: u64,
-        start_after: u64,
-        variance_threshold_value: u128, 
-        variance_threshold_scale: u8, 
-        force_report_period: u64,
-        expiration: u64,
-        disable_crank: bool,
-        history_limit: u64,
-        read_charge: u64,
-        reward_escrow: address,
-        read_whitelist: vector<address>,
-        limit_reads_to_whitelist: bool,
-
-        // Lease
-        load_coin: &mut Coin<CoinType>,
-        load_amount: u64,
-
-   * 
-   */
 }
 
 // Create a feed with jobs, a lease, then optionally push the lease to the specified crank
