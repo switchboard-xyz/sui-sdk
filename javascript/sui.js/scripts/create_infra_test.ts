@@ -84,6 +84,13 @@ let openRoundEventListener: SuiEvent;
   const provider = new JsonRpcProvider(Network.DEVNET);
   let keypair: Ed25519Keypair | null = null;
 
+  const agg = new AggregatorAccount(
+    provider,
+    "0x50c4d3631711d40e2f158e18054bba29886e2c06",
+    SWITCHBOARD_ADDRESS
+  );
+  console.log(await agg.loadData());
+
   // if file extension ends with yaml
   try {
     const parsed = fs.readFileSync("./sui-keypair.json", {
@@ -263,6 +270,8 @@ let openRoundEventListener: SuiEvent;
             return jobData;
           })
         );
+
+        console.log(jobs);
         // simulate a fetch
         const response = await fetch(`https://api.switchboard.xyz/api/test`, {
           method: "POST",
@@ -272,6 +281,7 @@ let openRoundEventListener: SuiEvent;
         if (!response.ok)
           console.error(`[Task runner] Error testing jobs json.`);
         try {
+          console.log("saving result");
           const json = await response.json();
           // try save result
           const tx = await aggregator.saveResult(keypair, {
