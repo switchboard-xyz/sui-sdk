@@ -15,6 +15,7 @@ import {
   Network,
   SubscriptionId,
   Keypair,
+  EventType,
 } from "@mysten/sui.js";
 import * as SHA3 from "js-sha3";
 export { OracleJob, IOracleJob } from "@switchboard-xyz/common";
@@ -105,15 +106,12 @@ export interface AggregatorInitParams {
 }
 
 export interface AggregatorSaveResultParams {
+  capObjectId: string;
   oracleAddress: string;
-  oracleIdx: number;
-  error: boolean;
   queueAddress: string;
   // this should probably be automatically generated
   value: Big;
   jobsChecksum: string;
-  minResponse: Big;
-  maxResponse: Big;
 }
 
 export interface OracleSaveResultParams extends AggregatorSaveResultParams {
@@ -345,7 +343,7 @@ export function getSuiMoveCall(
   method: string,
   args: Array<any> = [],
   typeArgs: Array<string> = [],
-  gasBudget: number = 10000
+  gasBudget: number = 20000
 ): MoveCallTransaction {
   const [packageObjectId, module, fn] = method.split("::");
   const payload: MoveCallTransaction = {
@@ -368,31 +366,34 @@ export class SuiEvent {
     readonly provider: JsonRpcProvider,
     readonly pkg: string,
     readonly moduleName: string,
-    readonly eventType: string
+    readonly eventType: string,
+    readonly moveEvent: EventType = "MoveEvent"
   ) {}
 
   async onTrigger(
     callback: EventCallback,
     errorHandler?: (error: unknown) => void
   ) {
-    this.intervalId = await this.provider.subscribeEvent(
-      {
-        All: [
-          { EventType: "MoveEvent" },
-          { Package: this.pkg },
-          { Module: this.moduleName },
-          { MoveEventType: this.eventType },
-        ],
-      },
-      (event: SuiEventEnvelope) => {
-        try {
-          callback(event);
-        } catch (e) {
-          errorHandler(e);
+    try {
+      this.intervalId = await this.provider.subscribeEvent(
+        {
+          All: [
+            { Package: this.pkg },
+            { Module: this.moduleName },
+            { EventType: this.moveEvent },
+            this.eventType && { MoveEventType: this.eventType },
+          ].filter((ev) => ev),
+        },
+        (event: SuiEventEnvelope) => {
+          try {
+            callback(event);
+          } catch (e) {}
         }
-      }
-    );
-    return this.intervalId;
+      );
+      return this.intervalId;
+    } catch (e) {
+      console.log("how tf", e);
+    }
   }
 
   stop() {
@@ -566,59 +567,33 @@ export class AggregatorAccount {
       scale: valueScale,
       neg: valueNeg,
     } = SuiDecimal.fromBig(params.value);
-    const {
-      mantissa: minResponseMantissa,
-      scale: minResponseScale,
-      neg: minResponseNeg,
-    } = SuiDecimal.fromBig(params.minResponse);
-    const {
-      mantissa: maxResponseMantissa,
-      scale: maxResponseScale,
-      neg: maxResponseNeg,
-    } = SuiDecimal.fromBig(params.maxResponse);
+    /**
+        cap: AggregatorRoundCap, 
+        oracle: &mut Oracle,
+        aggregator: &mut Aggregator,
+        oracle_queue: &mut OracleQueue<CoinType>,
+        value_num: u128,
+        value_scale_factor: u8, // scale factor
+        value_neg: bool,
+        _jobs_checksum: vector<u8>, // TODO: incorporate a check for this here
+        now: u64,
+        ctx: &mut TxContext,
+     */
     const tx = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_save_result_action::run`,
       [
+        params.capObjectId,
         params.oracleAddress,
         this.address,
         params.queueAddress,
-        params.oracleIdx,
-        params.error,
         valueMantissa,
         valueScale,
         valueNeg,
         [...Buffer.from(params.jobsChecksum, "base64")],
-        minResponseMantissa,
-        minResponseScale,
-        minResponseNeg,
-        maxResponseMantissa,
-        maxResponseScale,
-        maxResponseNeg,
         Math.floor(Date.now() / 1000),
       ],
       [this.coinType ?? "0x2::sui::SUI"]
     );
-
-    /* 
-    
-        oracle: &mut Oracle,
-        aggregator: &mut Aggregator,
-        oracle_queue: &mut OracleQueue<CoinType>,
-        oracle_idx: u64,
-        error: bool,
-        value_num: u128,
-        value_scale_factor: u8, // scale factor
-        value_neg: bool,
-        jobs_checksum: vector<u8>,
-        min_response_num: u128,
-        min_response_scale_factor: u8,
-        min_response_neg: bool,
-        max_response_num: u128,
-        max_response_scale_factor: u8,
-        max_response_neg: bool,
-        now: u64,
-        ctx: &mut TxContext,
-    */
 
     const signerWithProvider = new RawSigner(signer, this.provider);
     return sendSuiTx(signerWithProvider, {
@@ -638,7 +613,7 @@ export class AggregatorAccount {
         this.address,
         aggregatorData.queue_addr,
         jitter ?? 1,
-        Math.floor(Date.now()),
+        Math.floor(Date.now() / 1000),
       ],
       [this.coinType]
     );
@@ -767,7 +742,6 @@ export class AggregatorAccount {
       `events`,
       `${switchboardAddress}::events::AggregatorUpdateEvent`
     );
-
     event.onTrigger(callback);
     return event;
   }
