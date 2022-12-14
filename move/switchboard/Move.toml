@@ -1,0 +1,12 @@
+[package]
+name = "switchboard"
+version = "0.0.1"
+
+[dependencies]
+MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/deps/move-stdlib", rev = "devnet" }
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework", rev = "devnet" }
+
+[addresses]
+switchboard =  "0x0"
+std = "0x1"
+sui =  "0x2"

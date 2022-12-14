@@ -558,6 +558,34 @@ export class AggregatorAccount {
     };
   }
 
+  async createResult(
+    signer: Keypair,
+    params: AggregatorSaveResultParams
+  ): Promise<SuiExecuteTransactionResponse> {
+    const {
+      mantissa: valueMantissa,
+      scale: valueScale,
+      neg: valueNeg,
+    } = SuiDecimal.fromBig(params.value);
+    const tx = getSuiMoveCall(
+      `${this.switchboardAddress}::aggregator_save_result_action::create_result`,
+      [
+        params.capObjectId,
+        valueMantissa,
+        valueScale,
+        valueNeg,
+        Math.floor(Date.now() / 1000),
+      ],
+      []
+    );
+
+    const signerWithProvider = new RawSigner(signer, this.provider);
+    return sendSuiTx(signerWithProvider, {
+      kind: "moveCall",
+      data: tx,
+    });
+  }
+
   async saveResult(
     signer: Keypair,
     params: AggregatorSaveResultParams

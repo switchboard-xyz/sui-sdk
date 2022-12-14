@@ -40,9 +40,10 @@ import {
 } from "@mysten/sui.js";
 import * as SHA3 from "js-sha3";
 import * as fs from "fs";
+import fetch from "node-fetch";
 
 // devnet addr
-const SWITCHBOARD_ADDRESS = "0xa245f02902fd461440137e7896a80fbfbdb4c88b";
+const SWITCHBOARD_ADDRESS = "0x8c8b750023fbd573955c431fb4395e7e396aaca3";
 
 const onAggregatorUpdate = (
   client: JsonRpcProvider,
@@ -298,7 +299,7 @@ let openRoundEventListener: SuiEvent;
             });
             console.log("save result tx:", tx);
           } catch (e) {
-            console.log("failed save result tx!!!!", e);
+            console.log(e);
           } // errors will happen when task runner returns them
         } catch (e) {
           console.log("open round resp fail");
