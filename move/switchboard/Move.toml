@@ -7,6 +7,6 @@ MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/s
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework", rev = "devnet" }
 
 [addresses]
-switchboard =  "0x0"
+switchboard =  "0x8c8b750023fbd573955c431fb4395e7e396aaca3"
 std = "0x1"
 sui =  "0x2"
