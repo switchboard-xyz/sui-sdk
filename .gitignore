@@ -4,7 +4,6 @@ build/**
 lib
 *-keypair.json
 .switchboard
-.aptos
 .cache
 *.env
 demo/build/
@@ -13,3 +12,4 @@ demo/build/Switchboard_Demo/**
 build/
 dist
 sui.log*
+sui-secret.txt
