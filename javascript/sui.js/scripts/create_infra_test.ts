@@ -1,20 +1,12 @@
 /**
- * Creates a new account, inititalizes a Switchboard Resource Account on it
+ * Create a new Switchboard Queue, Oracle, Crank, and Aggregator
  *
- * Using that it should:
- *
- * DEMO --
- * Creates a new Aggregator
- * Creates a new Job (ftx btc/usd),
- * Adds Job to Aggregator
- * Push Aggregator to Crank
+ * Mimics feed updates.
  */
 import Big from "big.js";
 import { Buffer } from "buffer";
 import {
   AggregatorAccount,
-  OracleAccount,
-  JobAccount,
   OracleQueueAccount,
   CrankAccount,
   OracleJob,
@@ -26,24 +18,13 @@ import {
 import {
   Ed25519Keypair,
   JsonRpcProvider,
-  SignableTransaction,
-  UnserializedSignableTransaction,
   getObjectFields,
-  SuiEventEnvelope,
-  MoveCallTransaction,
-  RawSigner,
-  SignerWithProvider,
-  SuiExecuteTransactionResponse,
   Network,
-  SubscriptionId,
-  Keypair,
 } from "@mysten/sui.js";
-import * as SHA3 from "js-sha3";
 import * as fs from "fs";
-import fetch from "node-fetch";
 
-// devnet addr
-const SWITCHBOARD_ADDRESS = "0x8c8b750023fbd573955c431fb4395e7e396aaca3";
+// devnet address
+const SWITCHBOARD_ADDRESS = "0x69da62384b7134af63bedeee615db9c4ce183b8f";
 
 const onAggregatorUpdate = (
   client: JsonRpcProvider,
@@ -91,18 +72,17 @@ let openRoundEventListener: SuiEvent;
 
     // if file extension ends with yaml
     try {
-      const parsed = fs.readFileSync("./sui-keypair.json", {
-        encoding: "hex",
+      const parsed = fs.readFileSync("./sui-secret.txt", {
+        encoding: "utf8",
       });
-      console.log(parsed);
       keypair = Ed25519Keypair.fromSecretKey(Buffer.from(parsed, "hex"));
     } catch (_e) {
       keypair = new Ed25519Keypair();
+      console.log(JSON.stringify(keypair));
       fs.writeFileSync(
-        "./sui-keypair.json",
+        "./sui-secret.txt",
         // @ts-ignore
-        keypair.keypair.secretKey,
-        { encoding: "hex" }
+        Buffer.from(keypair.keypair.secretKey).toString("hex")
       );
     }
 
@@ -279,6 +259,7 @@ let openRoundEventListener: SuiEvent;
           const jobs: OracleJob[] = await agg.loadJobs();
 
           // simulate a fetch
+          // @ts-ignore
           const response = await fetch(`https://api.switchboard.xyz/api/test`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -288,7 +269,7 @@ let openRoundEventListener: SuiEvent;
             console.error(`[Task runner] Error testing jobs json.`);
           try {
             console.log("saving result");
-            const json = await response.json();
+            const json: any = await response.json();
             // try save result
             const tx = await aggregator.saveResult(keypair, {
               capObjectId: dataId,

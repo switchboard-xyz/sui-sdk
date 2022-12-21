@@ -2,22 +2,19 @@ import { OracleJob } from "@switchboard-xyz/common";
 import Big from "big.js";
 import BN from "bn.js";
 import {
-  Ed25519Keypair,
   JsonRpcProvider,
   SignableTransaction,
-  UnserializedSignableTransaction,
   getObjectFields,
   SuiEventEnvelope,
   MoveCallTransaction,
   RawSigner,
   SignerWithProvider,
   SuiExecuteTransactionResponse,
-  Network,
   SubscriptionId,
   Keypair,
   EventType,
 } from "@mysten/sui.js";
-import * as SHA3 from "js-sha3";
+
 export { OracleJob, IOracleJob } from "@switchboard-xyz/common";
 export const SWITCHBOARD_DEVNET_ADDRESS = ``;
 export const SWITCHBOARD_TESTNET_ADDRESS = ``;
@@ -172,7 +169,8 @@ export interface CrankInitParams {
 }
 
 export interface CrankPopParams {
-  crankAddress: string;
+  queueAddress: string;
+  popIdx?: number;
 }
 
 export interface CrankPushParams {
@@ -987,11 +985,24 @@ export class CrankAccount {
    */
   async pop(
     signer: Keypair,
-    pop_idx?: number
+    params: CrankPopParams
   ): Promise<SuiExecuteTransactionResponse> {
+    /*
+        crank: &mut Crank, 
+        queue: &mut OracleQueue<CoinType>, 
+        aggregator1: &mut Aggregator,
+        aggregator2: &mut Aggregator,
+        aggregator3: &mut Aggregator,
+        pop_idx: u64,
+        now: u64,
+        ctx: &mut TxContext,
+    */
+
+    const crankData = await this.loadData();
+    console.log(crankData);
     const tx = getSuiMoveCall(
-      `${this.switchboardAddress}::crank_pop_action::run`,
-      [this.address, pop_idx ?? 0],
+      `${this.switchboardAddress}::crank_pop_action::run_3`,
+      [this.address, params.queueAddress, params.popIdx ?? 0],
       [this.coinType]
     );
     const signerWithProvider = new RawSigner(signer, this.provider);

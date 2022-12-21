@@ -7,6 +7,8 @@ A library of utility functions to interact with Switchboard Modules on Sui
 
 ## Live Deployment:
 
+Switchboard is live on devnet at `0x69da62384b7134af63bedeee615db9c4ce183b8f`. You can begin integrating the interface right away, but the deployment is actively being worked on. Interfaces are subject to change in the coming weeks as we iterate on the project.
+
 ## Install
 
 ```
@@ -20,7 +22,10 @@ import { Buffer } from "buffer";
 import { OracleJob, createFeed } from "@switchboard-xyz/sui.js";
 import Big from "big.js";
 
-console.log(`User account ${user.address().hex()} created + funded.`);
+// devnet address
+const SWITCHBOARD_ADDRESS = "0x69da62384b7134af63bedeee615db9c4ce183b8f";
+const QUEUE_ADDRESS = "0x4be684c370a3db8811125bd19096bc43ed0739ed";
+const CRANK_ADDRESS = "0x69da62384b7134af63bedeee615db9c4ce183b8f";
 
 // Make Job data for btc price
 const serializedJob = Buffer.from(
@@ -43,24 +48,29 @@ const serializedJob = Buffer.from(
 );
 
 const [aggregator, createFeedTx] = await createFeed(
-  client,
-  user,
+  provider,
+  keypair,
   {
-    authority: user.address(),
-    queueAddress: SWITCHBOARD_QUEUE_ADDRESS, // account with OracleQueue resource
-    crankAddress: SWITCHBOARD_CRANK_ADDRESS, // account with Crank resource
-    batchSize: 1, // number of oracles to respond to each round
-    minJobResults: 1, // minimum # of jobs that need to return a result
-    minOracleResults: 1, // minumum # of oracles that need to respond for a result
-    minUpdateDelaySeconds: 5, // minimum delay between rounds
-    coinType: "0x2::sui::SUI", // CoinType of the queue (now only Sui)
-    initialLoadAmount: 1000, // load of the lease
+    authority: USER_ADDRESS,
+    queueAddress: QUEUE_ADDRESS,
+    crankAddress: CRANK_ADDRESS,
+    batchSize: 1,
+    minJobResults: 1,
+    minOracleResults: 1,
+    minUpdateDelaySeconds: 5,
+    startAfter: 0,
+    varianceThreshold: new Big(0),
+    forceReportPeriod: 0,
+    expiration: 0,
+    coinType: "0x2::sui::SUI",
+    initialLoadAmount: 1,
+    loadCoin: USER_COIN_OBJECT_ID,
     jobs: [
       {
         name: "BTC/USD",
         metadata: "binance",
-        authority: user.address().hex(),
-        data: serializedJob.toString("base64"), // jobs need to be base64 encoded strings
+        authority: userAddress,
+        data: Array.from(serializedJob1),
         weight: 1,
       },
     ],
@@ -68,20 +78,7 @@ const [aggregator, createFeedTx] = await createFeed(
   SWITCHBOARD_ADDRESS
 );
 
-console.log(
-  `Created Aggregator and Lease resources at account address ${aggregator.address}. Tx hash ${createFeedTx}`
-);
-
-// Manually trigger an update
-await aggregator.openRound(user);
-```
-
-### Listening to Updates
-
-```ts
-/**
- * Listen to Aggregator Updates Off-Chain
- */
+console.log(`Created Aggregator address ${aggregator.address}.`);
 ```
 
 ### Reading Feeds
@@ -104,18 +101,19 @@ console.log(await aggregatorAccount.loadData());
 
 ```toml
 [package]
-name = "pkgname"
+name = "Package"
 version = "0.0.1"
 
 [dependencies]
 MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/deps/move-stdlib", rev = "devnet" }
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework", rev = "devnet" }
-Switchboard = { git = "https://github.com/switchboard-xyz/sbv2-sui.git", subdir = "move/switchboard/", rev = "main" }
+switchboard = { git = "https://github.com/switchboard-xyz/sbv2-sui.git", subdir = "move/switchboard/", rev = "main"  }
 
 [addresses]
-switchboard =  "0x0"
+package = "0x0"
 std = "0x1"
 sui =  "0x2"
+switchboard =  "0x8c8b750023fbd573955c431fb4395e7e396aaca3"
 ```
 
 ### Reading Feeds
@@ -125,17 +123,34 @@ use switchboard::aggregator;
 use switchboard::math;
 
 // store latest value
-struct AggregatorInfo has copy, drop, store, key {
+struct AggregatorInfo has store, key {
+    id: UID,
     aggregator_addr: address,
     latest_result: u128,
     latest_result_scaling_factor: u8,
-    latest_result_neg: bool,
+    round_id: u128,
+    latest_timestamp: u64,
 }
 
 // get latest value
-public fun save_latest_value(aggregator_addr: address) {
+public entry fun save_aggregator_info(
+    feed: &Aggregator,
+    ctx: &mut TxContext
+) {
+    let (latest_result, latest_timestamp, round_id) = aggregator::latest_value(feed);
+
     // get latest value
-    let latest_value = aggregator::latest_value(aggregator_addr);
-    let (value, scaling_factor, neg) = math::unpack(latest_value);
+    let (value, scaling_factor, _neg) = math::unpack(latest_result);
+    transfer::transfer(
+        AggregatorInfo {
+            id: object::new(ctx),
+            latest_result: value,
+            latest_result_scaling_factor: scaling_factor,
+            aggregator_addr: aggregator::aggregator_address(feed),
+            latest_timestamp,
+            round_id,
+        },
+        tx_context::sender(ctx)
+    );
 }
 ```
