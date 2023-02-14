@@ -50,9 +50,14 @@ feeds.
 
 ## Libraries
 
-| **Lang** | **Name**                                                                                                                                                                                    | **Description**                                    |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| JS       | [@switchboard-xyz/sui.js](/javascript/sui.js/) <br />[[npmjs](https://www.npmjs.com/package/@switchboard-xyz/sui.js), [Typedocs](https://docs.switchboard.xyz/api/@switchboard-xyz/sui.js)] | Typescript package to interact with Switchboard V2 |
+| **Lang** | **Name**                                                                                                                                                                                    | **Description**                                            |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Move     | [switchboard](/move/switchboard/)                                                                                                                                                           | Move module to deserialize and read Switchboard data feeds |
+| JS       | [@switchboard-xyz/sui.js](/javascript/sui.js/) <br />[[npmjs](https://www.npmjs.com/package/@switchboard-xyz/sui.js), [Typedocs](https://docs.switchboard.xyz/api/@switchboard-xyz/sui.js)] | Typescript package to interact with Switchboard V2         |
+
+## Example Programs
+
+- [feed-parser](/programs/feed-parser/): Read a Switchboard feed on Sui
 
 ## Troubleshooting
 
