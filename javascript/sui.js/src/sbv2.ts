@@ -1138,24 +1138,24 @@ export class OracleQueueAccount {
         params.authority,
         params.name,
         params.metadata,
-        params.oracleTimeout,
-        params.reward,
-        params.minStake,
+        `${params.oracleTimeout}`,
+        `${params.reward}`,
+        `${params.minStake}`,
         params.slashingEnabled,
         `${params.varianceToleranceMultiplierValue}`,
         params.varianceToleranceMultiplierScale,
-        params.feedProbationPeriod,
-        params.consecutiveFeedFailureLimit,
-        params.consecutiveOracleFailureLimit,
+        `${params.feedProbationPeriod}`,
+        `${params.consecutiveFeedFailureLimit}`,
+        `${params.consecutiveOracleFailureLimit}`,
         params.unpermissionedFeedsEnabled,
         params.unpermissionedVrfEnabled,
         params.lockLeaseFunding,
         params.enableBufferRelayers,
-        params.maxSize,
-        params.save_confirmation_reward ?? 0,
-        params.save_reward ?? 0,
-        params.open_round_reward ?? 0,
-        params.slashing_penalty ?? 0,
+        `${params.maxSize ?? 100}`,
+        `${params.save_confirmation_reward ?? 0}`,
+        `${params.save_reward ?? 0}`,
+        `${params.open_round_reward ?? 0}`,
+        `${params.slashing_penalty ?? 0}`,
         `${Math.floor(Date.now() / 1000)}`,
       ],
       [params.coinType ?? "0x2::sui::SUI"]
@@ -1361,12 +1361,10 @@ export class Permission {
 
   async loadData(): Promise<any> {
     const result = await this.provider.getObject(this.objectId);
-    const childResults = await this.provider.getObjectsOwnedByObject(
-      this.objectId
-    );
+    const childResults = await this.provider.getDynamicFields(this.objectId);
     const childFields = (
       await Promise.all(
-        childResults.map(async (res) => {
+        childResults.data.map(async (res) => {
           const data = await this.provider.getObject(res.objectId);
           return getObjectFields(data);
         })
@@ -1639,9 +1637,9 @@ export async function createOracle(
 }
 
 async function getDynamicChildren(provider: JsonRpcProvider, objectId: string) {
-  const childResults = await provider.getObjectsOwnedByObject(objectId);
+  const childResults = await provider.getDynamicFields(objectId);
   const children = await Promise.all(
-    childResults.map(async (res) => {
+    childResults.data.map(async (res) => {
       const data = await provider.getObject(res.objectId);
       return getObjectFields(data);
     })

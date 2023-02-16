@@ -24,7 +24,7 @@ import {
 import * as fs from "fs";
 
 // devnet address
-const SWITCHBOARD_ADDRESS = "0x69da62384b7134af63bedeee615db9c4ce183b8f";
+const SWITCHBOARD_ADDRESS = "0x0f2d107638606c254203ec5371311d3476a07f71";
 
 const onAggregatorUpdate = (
   client: JsonRpcProvider,
