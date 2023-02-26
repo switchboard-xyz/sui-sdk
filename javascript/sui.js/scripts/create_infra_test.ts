@@ -24,7 +24,7 @@ import {
 import * as fs from "fs";
 
 // devnet address
-const SWITCHBOARD_ADDRESS = "0x2c8fb192385159913c2a893c64d8b9482922d54f";
+const SWITCHBOARD_ADDRESS = "0x378ffab5189f2022dec1233a6fd105c2aaf1dae0";
 
 const onAggregatorUpdate = (
   client: JsonRpcProvider,
@@ -44,16 +44,16 @@ const updateEventListener = onAggregatorUpdate(
   }
 );
 
-async function onAggregatorOpenRound(
+async function onAggregatorOpenInterval(
   provider: JsonRpcProvider,
   callback: EventCallback
 ): Promise<SuiEvent> {
   const event = new SuiEvent(
     provider,
     SWITCHBOARD_ADDRESS,
-    `aggregator_open_round_action`,
-    ``,
-    "NewObject"
+    `aggregator_open_interval_action`,
+    `MoveEvent`,
+    `${SWITCHBOARD_ADDRESS}::events::AggregatorOpenIntervalEvent`
   );
   await event.onTrigger(callback, (e) => {
     console.error("exit from real open round", e);
@@ -136,6 +136,10 @@ let openRoundEventListener: SuiEvent;
     // first heartbeat
     const heartbeatTxHash = await oracle.heartbeat(keypair, queue.address);
     console.log("First Heartbeat Tx Hash:", heartbeatTxHash);
+
+    // get oracle index
+    const oracleIdx = await queue.findOracleIdx(oracle.address);
+
     // heartbeat every 30 seconds
     setInterval(async () => {
       try {
@@ -195,27 +199,24 @@ let openRoundEventListener: SuiEvent;
       `Created AggregatorAccount and LeaseAccount resources at account address ${aggregator.address}. Tx hash ${createFeedTx}`
     );
 
-    openRoundEventListener = await onAggregatorOpenRound(
+    openRoundEventListener = await onAggregatorOpenInterval(
       new JsonRpcProvider(devnetConnection),
       async (e) => {
         console.log(e);
+        console.log(`JSON:`, JSON.stringify(e, null, 2));
         try {
-          const dataId = e.event.newObject.objectId;
-          const result = await provider.getObject(dataId);
-          const fields = getObjectFields(result);
-          console.log(fields);
-
+          const fields = e.event.moveEvent.fields;
           // only handle updates for this aggregator
-          if (fields.aggregator !== aggregator.address) {
+          if (fields.aggregator_address !== aggregator.address) {
             return;
           }
 
           const agg = new AggregatorAccount(
             provider,
-            fields.aggregator,
+            fields.aggregator_address,
             SWITCHBOARD_ADDRESS
           );
-          const aggregatorData = await agg.loadData();
+
           // The event data includes JobAccount Pubkeys, so grab the JobAccount Data
           const jobs: OracleJob[] = await agg.loadJobs();
 
@@ -228,12 +229,14 @@ let openRoundEventListener: SuiEvent;
           });
           if (!response.ok)
             console.error(`[Task runner] Error testing jobs json.`);
+
           try {
             console.log("saving result");
             const json: any = await response.json();
             // try save result
             const tx = await aggregator.saveResult(keypair, {
               oracleAddress: oracle.address,
+              oracleIdx: oracleIdx,
               queueAddress: queue.address,
               value: new Big(json.result),
             });
@@ -242,6 +245,7 @@ let openRoundEventListener: SuiEvent;
             console.log(e);
           } // errors will happen when task runner returns them
         } catch (e) {
+          console.log(e);
           console.log("open round resp fail");
         }
       }
@@ -257,7 +261,7 @@ let openRoundEventListener: SuiEvent;
     console.log("Load aggregator jobs data", await aggregator.loadJobs());
     setInterval(async () => {
       try {
-        //await aggregator.openRound(keypair);
+        await aggregator.openInterval(keypair, coin.details.reference.objectId);
         console.log("opening round");
       } catch (e) {
         console.log("failed open round", e);

@@ -1,7 +1,7 @@
 {
   "name": "@switchboard-xyz/sui.js",
   "description": "API wrapper for intergating with the Switchboardv2 program on sui",
-  "version": "2.1.0",
+  "version": "2.2.1",
   "license": "MIT",
   "bin": {
     "sbv2-sui": "./sbv2-sui.ts"

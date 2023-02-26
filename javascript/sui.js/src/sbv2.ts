@@ -98,6 +98,7 @@ export interface AggregatorInitParams {
 
 export interface AggregatorSaveResultParams {
   oracleAddress: string;
+  oracleIdx: number;
   queueAddress: string;
   value: Big;
 }
@@ -164,13 +165,6 @@ export interface OracleQueueSetConfigsParams {
   coinType?: string;
 }
 
-export interface LeaseInitParams {
-  queue: string;
-  withdrawAuthority: string;
-  initialAmount: number;
-  coinType: string;
-}
-
 export interface LeaseExtendParams {
   queueAddress: string;
   loadCoinId: string;
@@ -182,12 +176,6 @@ export interface LeaseWithdrawParams {
   queueAddress: string;
   amount: number;
   coinType: string;
-}
-
-export interface EscrowContributeParams {
-  oracleAddress: string;
-  queueAddress: string;
-  loadAmount: number;
 }
 
 export interface EscrowWithdrawParams {
@@ -286,8 +274,8 @@ export class SuiEvent {
     readonly provider: JsonRpcProvider,
     readonly pkg: string,
     readonly moduleName: string,
-    readonly eventType: string,
-    readonly moveEvent: EventType = "MoveEvent"
+    readonly eventType: EventType = "MoveEvent",
+    readonly moveEvent?: string
   ) {}
 
   async onTrigger(
@@ -300,8 +288,8 @@ export class SuiEvent {
           All: [
             { Package: this.pkg },
             { Module: this.moduleName },
-            { EventType: this.moveEvent },
-            this.eventType && { MoveEventType: this.eventType },
+            { EventType: this.eventType },
+            this.moveEvent && { MoveEventType: this.moveEvent },
           ].filter((ev) => ev),
         },
         (event: SuiEventEnvelope) => {
@@ -488,6 +476,7 @@ export class AggregatorAccount {
       `${this.switchboardAddress}::aggregator_save_result_action::run`,
       [
         params.oracleAddress,
+        `${params.oracleIdx}`,
         this.address,
         params.queueAddress,
         valueMantissa,
@@ -511,15 +500,9 @@ export class AggregatorAccount {
     const aggregatorData = await this.loadData();
     const tx = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_open_interval_action::run`,
-      [
-        this.address,
-        aggregatorData.queue_addr,
-        loadCoin,
-        `${Math.floor(Date.now() / 1000)}`, // TODO Replace with Clock
-      ],
+      [aggregatorData.queue_addr, this.address, loadCoin],
       [this.coinType]
     );
-
     const signerWithProvider = new RawSigner(signer, this.provider);
     return sendSuiTx(signerWithProvider, {
       kind: "moveCall",
@@ -644,7 +627,8 @@ export class AggregatorAccount {
     const event = new SuiEvent(
       provider,
       switchboardAddress,
-      `events`,
+      `aggregator_save_result_action`,
+      `MoveEvent`,
       `${switchboardAddress}::events::AggregatorUpdateEvent`
     );
     event.onTrigger(callback);
@@ -693,6 +677,115 @@ export class AggregatorAccount {
     }
     const change = new Big(1).minus(diff);
     return change.gt(varianceThreshold);
+  }
+
+  /**
+   * Extend a lease
+   * @param params CrankPushParams
+   */
+  async extend(
+    signer: Keypair,
+    params: LeaseExtendParams
+  ): Promise<SuiExecuteTransactionResponse> {
+    const queueAddress: string = (await this.loadData()).queue_addr;
+    const tx = getSuiMoveCall(
+      `${this.switchboardAddress}::aggregator_escrow_deposit_action::run`,
+      [queueAddress, this.address, params.loadCoinId, params.loadAmount],
+      [this.coinType]
+    );
+    const signerWithProvider = new RawSigner(signer, this.provider);
+    return sendSuiTx(signerWithProvider, {
+      kind: "moveCall",
+      data: tx,
+    });
+  }
+
+  /**
+   * Extend a lease tx
+   * @param params CrankPushParams
+   */
+  async extendTx(params: LeaseExtendParams): Promise<SignableTransaction> {
+    const queueAddress: string = (await this.loadData()).queue_addr;
+    const tx = getSuiMoveCall(
+      `${this.switchboardAddress}::aggregator_escrow_deposit_action::run`,
+      [queueAddress, this.address, params.loadCoinId, params.loadAmount],
+      [this.coinType]
+    );
+    return {
+      kind: "moveCall",
+      data: tx,
+    };
+  }
+
+  async withdraw(
+    signer: Keypair,
+    params: LeaseWithdrawParams
+  ): Promise<SuiExecuteTransactionResponse> {
+    const queueAddress: string = (await this.loadData()).queue_addr;
+    const tx = getSuiMoveCall(
+      `${this.switchboardAddress}::aggregator_escrow_withdraw_action::run`,
+      [queueAddress, this.address, params.amount],
+      [this.coinType]
+    );
+    const signerWithProvider = new RawSigner(signer, this.provider);
+    return sendSuiTx(signerWithProvider, {
+      kind: "moveCall",
+      data: tx,
+    });
+  }
+
+  /**
+   * Extend a lease tx
+   * @param params CrankPushParams
+   */
+  async withdrawTx(
+    account: string,
+    params: LeaseWithdrawParams
+  ): Promise<SignableTransaction> {
+    const queueAddress: string = (await this.loadData()).queue_addr;
+    const tx = getSuiMoveCall(
+      `${this.switchboardAddress}::aggregator_escrow_withdraw_action::run`,
+      [queueAddress, this.address, params.amount],
+      [this.coinType]
+    );
+    return {
+      kind: "moveCall",
+      data: tx,
+    };
+  }
+
+  /**
+   * Push feed to the crank
+   * @param params CrankPushParams
+   */
+  async crankPushTx(): Promise<SignableTransaction> {
+    const queueAddress: string = (await this.loadData()).queue_addr;
+    const tx = getSuiMoveCall(
+      `${this.switchboardAddress}::crank_push_action::run`,
+      [queueAddress, this.address],
+      [this.coinType]
+    );
+    return {
+      kind: "moveCall",
+      data: tx,
+    };
+  }
+
+  /**
+   * check that a feed is on the crank
+   */
+  async isOnCrank(): Promise<boolean> {
+    const queueAddress: string = (await this.loadData()).queue_addr;
+    const queueAccount = new OracleQueueAccount(
+      this.provider,
+      queueAddress,
+      this.switchboardAddress
+    );
+
+    const queueData = await queueAccount.loadData();
+    return (
+      queueData.crank_feeds.findIndex((f: string) => f === this.address) !== -1
+    );
   }
 }
 
@@ -871,6 +964,23 @@ export class OracleAccount {
       data: tx,
     });
   }
+
+  async withdraw(
+    signer: Keypair,
+    params: EscrowWithdrawParams
+  ): Promise<SuiExecuteTransactionResponse> {
+    const queueAddress: string = (await this.loadData()).queue_addr;
+    const tx = getSuiMoveCall(
+      `${this.switchboardAddress}::oracle_escrow_withdraw_action::run`,
+      [queueAddress, this.address, params.amount],
+      [this.coinType]
+    );
+    const signerWithProvider = new RawSigner(signer, this.provider);
+    return sendSuiTx(signerWithProvider, {
+      kind: "moveCall",
+      data: tx,
+    });
+  }
 }
 
 export class OracleQueueAccount {
@@ -945,6 +1055,13 @@ export class OracleQueueAccount {
     }
   }
 
+  async findOracleIdx(oracleAddress: string): Promise<number> {
+    const queueData = await this.loadData();
+    const oracles = queueData.data;
+    const idx = oracles.findIndex((o: string) => o === oracleAddress);
+    return idx;
+  }
+
   async setConfigs(
     signer: Keypair,
     params: OracleQueueSetConfigsParams
@@ -979,56 +1096,6 @@ export class OracleQueueAccount {
     replaceObj(queueData);
     return queueData;
   }
-}
-
-/**
- * Escrow for Aggregator
- */
-export class AggregatorEscrow {
-  constructor(
-    readonly provider: JsonRpcProvider,
-    readonly address: string /* aggregator account address */,
-    readonly switchboardAddress: string,
-    readonly coinType: string = "0x2::sui::SUI"
-  ) {}
-
-  /**
-   * Extend a lease
-   * @param params CrankPushParams
-   */
-  async extend(
-    signer: Keypair,
-    params: LeaseExtendParams
-  ): Promise<SuiExecuteTransactionResponse> {
-    const tx = getSuiMoveCall(
-      `${this.switchboardAddress}::aggregator_escrow_deposit_action::run`,
-      [this.address, params.loadAmount],
-      [this.coinType]
-    );
-    const signerWithProvider = new RawSigner(signer, this.provider);
-    return sendSuiTx(signerWithProvider, {
-      kind: "moveCall",
-      data: tx,
-    });
-  }
-
-  /**
-   * Extend a lease tx
-   * @param params CrankPushParams
-   */
-  extendTx(account: string, params: LeaseExtendParams): SignableTransaction {
-    const tx = getSuiMoveCall(
-      `${this.switchboardAddress}::aggregator_escrow_deposit_action::run`,
-      [this.address, params.loadAmount],
-      [this.coinType]
-    );
-    return {
-      kind: "moveCall",
-      data: tx,
-    };
-  }
-
-  async loadData(queueAddress: string): Promise<any> {}
 }
 
 export class Permission {
