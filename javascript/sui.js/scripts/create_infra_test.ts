@@ -8,7 +8,6 @@ import { Buffer } from "buffer";
 import {
   AggregatorAccount,
   OracleQueueAccount,
-  CrankAccount,
   OracleJob,
   SuiEvent,
   EventCallback,
@@ -19,26 +18,27 @@ import {
   Ed25519Keypair,
   JsonRpcProvider,
   getObjectFields,
-  Network,
+  Connection,
+  devnetConnection,
 } from "@mysten/sui.js";
 import * as fs from "fs";
 
 // devnet address
-const SWITCHBOARD_ADDRESS = "0x0f2d107638606c254203ec5371311d3476a07f71";
+const SWITCHBOARD_ADDRESS = "0x2c8fb192385159913c2a893c64d8b9482922d54f";
 
 const onAggregatorUpdate = (
   client: JsonRpcProvider,
   cb: EventCallback
 ): SuiEvent => {
   return AggregatorAccount.watch(
-    new JsonRpcProvider("wss://fullnode.devnet.sui.io:443"),
+    new JsonRpcProvider(devnetConnection),
     SWITCHBOARD_ADDRESS,
     cb
   );
 };
 
 const updateEventListener = onAggregatorUpdate(
-  new JsonRpcProvider("wss://fullnode.devnet.sui.io:443"),
+  new JsonRpcProvider(devnetConnection),
   async (e) => {
     console.log(`NEW RESULT:`, JSON.stringify(e));
   }
@@ -67,7 +67,7 @@ let openRoundEventListener: SuiEvent;
 (async () => {
   try {
     // connect to Devnet
-    const provider = new JsonRpcProvider(Network.DEVNET);
+    const provider = new JsonRpcProvider(devnetConnection);
     let keypair: Ed25519Keypair | null = null;
 
     // if file extension ends with yaml
@@ -77,13 +77,7 @@ let openRoundEventListener: SuiEvent;
       });
       keypair = Ed25519Keypair.fromSecretKey(Buffer.from(parsed, "hex"));
     } catch (_e) {
-      keypair = new Ed25519Keypair();
-      console.log(JSON.stringify(keypair));
-      fs.writeFileSync(
-        "./sui-secret.txt",
-        // @ts-ignore
-        Buffer.from(keypair.keypair.secretKey).toString("hex")
-      );
+      console.log(_e);
     }
 
     // create new user
@@ -110,21 +104,11 @@ let openRoundEventListener: SuiEvent;
       keypair,
       {
         name: "switchboard unpermissioned queue",
-        metadata: "running",
         authority: userAddress,
         oracleTimeout: 3000,
         reward: 0,
-        minStake: 0,
-        slashingEnabled: false,
-        varianceToleranceMultiplierValue: 0,
-        varianceToleranceMultiplierScale: 0,
-        feedProbationPeriod: 0,
-        consecutiveFeedFailureLimit: 0,
-        consecutiveOracleFailureLimit: 0,
         unpermissionedFeedsEnabled: true,
-        unpermissionedVrfEnabled: true,
         lockLeaseFunding: false,
-        enableBufferRelayers: false,
         maxSize: 1000,
         coinType: "0x2::sui::SUI",
       },
@@ -140,7 +124,6 @@ let openRoundEventListener: SuiEvent;
       {
         name: "Switchboard OracleAccount",
         authority: userAddress,
-        metadata: "metadata",
         queue: queue.address, //
         loadCoin: coin.details.reference.objectId,
         loadAmount: 0,
@@ -162,17 +145,7 @@ let openRoundEventListener: SuiEvent;
         console.log(e, "failed heartbeat");
       }
     }, 30000);
-    // create crank to catch aggregator push
-    const [crank, txhash] = await CrankAccount.init(
-      provider,
-      keypair,
-      {
-        queueObjectId: queue.address,
-        coinType: "0x2::sui::SUI",
-      },
-      SWITCHBOARD_ADDRESS
-    );
-    console.log(`Created crank at ${crank.address}, tx hash ${txhash}`);
+
     // Make JobAccount data for btc price
     const serializedJob1 = Buffer.from(
       OracleJob.encodeDelimited(
@@ -196,25 +169,21 @@ let openRoundEventListener: SuiEvent;
       provider,
       keypair,
       {
+        name: "BTC/USD",
         authority: userAddress,
         queueAddress: queue.address,
         batchSize: 1,
         minJobResults: 1,
         minOracleResults: 1,
         minUpdateDelaySeconds: 5,
-        startAfter: 0,
         varianceThreshold: new Big(0),
         forceReportPeriod: 0,
-        expiration: 0,
         coinType: "0x2::sui::SUI",
-        crankAddress: crank.address,
         initialLoadAmount: 1,
         loadCoin: coin.details.reference.objectId,
         jobs: [
           {
             name: "BTC/USD",
-            metadata: "binance",
-            authority: userAddress,
             data: Array.from(serializedJob1),
             weight: 1,
           },
@@ -227,22 +196,14 @@ let openRoundEventListener: SuiEvent;
     );
 
     openRoundEventListener = await onAggregatorOpenRound(
-      new JsonRpcProvider("wss://fullnode.devnet.sui.io:443"),
+      new JsonRpcProvider(devnetConnection),
       async (e) => {
         console.log(e);
         try {
           const dataId = e.event.newObject.objectId;
           const result = await provider.getObject(dataId);
           const fields = getObjectFields(result);
-
-          // fields looks like:
-          // {
-          //   aggregator: '0x094c02b33c386f1732b93ec18ef675428ddf7417',
-          //   id: { id: '0x8f42fd792a3b33751752128983fe9f1636c1f287' },
-          //   jobs_checksum: 'HS+xUEKt9h8btAEA8u0xjddh4GounAn9GCIIDGJwXNs=',
-          //   oracle: '0x92f2fd4beaa2403aaca8e49a1b79a88feab0353f',
-          //   rid: '1'
-          // }
+          console.log(fields);
 
           // only handle updates for this aggregator
           if (fields.aggregator !== aggregator.address) {
@@ -272,11 +233,9 @@ let openRoundEventListener: SuiEvent;
             const json: any = await response.json();
             // try save result
             const tx = await aggregator.saveResult(keypair, {
-              capObjectId: dataId,
               oracleAddress: oracle.address,
               queueAddress: queue.address,
               value: new Big(json.result),
-              jobsChecksum: aggregatorData.job_data.jobs_checksum,
             });
             console.log("save result tx:", tx);
           } catch (e) {
@@ -298,7 +257,7 @@ let openRoundEventListener: SuiEvent;
     console.log("Load aggregator jobs data", await aggregator.loadJobs());
     setInterval(async () => {
       try {
-        await aggregator.openRound(keypair);
+        //await aggregator.openRound(keypair);
         console.log("opening round");
       } catch (e) {
         console.log("failed open round", e);
