@@ -13,6 +13,7 @@ import {
   SubscriptionId,
   Keypair,
   EventType,
+  getObjectExistsResponse,
 } from "@mysten/sui.js";
 
 export { OracleJob, IOracleJob } from "@switchboard-xyz/common";
@@ -510,17 +511,12 @@ export class AggregatorAccount {
     });
   }
 
-  async openRoundTx(loadCoin: string): Promise<SignableTransaction> {
+  async openIntervalTx(loadCoin: string): Promise<SignableTransaction> {
     const aggregatorData = await this.loadData();
     const txData = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_open_interval_action::run`,
-      [
-        this.address,
-        aggregatorData.queue_addr,
-        loadCoin,
-        `${Math.floor(Date.now() / 1000)}`, // TODO Replace with Clock
-      ],
-      [this.coinType ?? "0x2::sui::SUI"]
+      [aggregatorData.queue_addr, this.address, loadCoin],
+      [this.coinType]
     );
     return {
       kind: "moveCall",
@@ -562,7 +558,6 @@ export class AggregatorAccount {
         params.rewardEscrow ? params.rewardEscrow : aggregator.reward_escrow,
         params.readWhitelist ?? aggregator.read_whitelist,
         params.limitReadsToWhitelist ?? aggregator.limit_reads_to_whitelist,
-        params.authority ?? aggregator.authority,
       ],
       [params.coinType ?? "0x2::sui::SUI"] // TODO
     );
@@ -617,6 +612,22 @@ export class AggregatorAccount {
       kind: "moveCall",
       data: txData,
     });
+  }
+
+  async setAuthorityTx(authority: string): Promise<SignableTransaction> {
+    const aggregatorData = await this.loadData();
+    const authorityInfo = (
+      await getAggregatorAuthorities(this.provider, aggregatorData.authority)
+    ).find((a) => a.aggregatorAddress === this.address);
+    const txData = getSuiMoveCall(
+      `${this.switchboardAddress}::aggregator_set_authority_action::run`,
+      [this.address, authorityInfo.authorityObjectId, authority],
+      [this.coinType]
+    );
+    return {
+      kind: "moveCall",
+      data: txData,
+    };
   }
 
   static watch(
@@ -681,7 +692,7 @@ export class AggregatorAccount {
 
   /**
    * Extend a lease
-   * @param params CrankPushParams
+   * @param params LeaseExtendParams
    */
   async extend(
     signer: Keypair,
@@ -702,7 +713,7 @@ export class AggregatorAccount {
 
   /**
    * Extend a lease tx
-   * @param params CrankPushParams
+   * @param params LeaseExtendParams
    */
   async extendTx(params: LeaseExtendParams): Promise<SignableTransaction> {
     const queueAddress: string = (await this.loadData()).queue_addr;
@@ -735,8 +746,8 @@ export class AggregatorAccount {
   }
 
   /**
-   * Extend a lease tx
-   * @param params CrankPushParams
+   * withdraw a lease tx
+   * @param params LeaseWithdrawParams
    */
   async withdrawTx(
     account: string,
@@ -1234,31 +1245,6 @@ export async function createFeedTx(
   params: CreateFeedParams,
   switchboardAddress: string
 ): Promise<SignableTransaction> {
-  /*
-        authority: address,
-        created_at: u64,
-
-        // Aggregator
-        name: vector<u8>,
-        queue: &mut OracleQueue<CoinType>,
-        batch_size: u64,
-        min_oracle_results: u64,
-        min_job_results: u64,
-        min_update_delay_seconds: u64,
-        variance_threshold_value: u128, 
-        variance_threshold_scale: u8, 
-        force_report_period: u64,
-        disable_crank: bool,
-        history_limit: u64,
-        read_charge: u64,
-        reward_escrow: address,
-        read_whitelist: vector<address>,
-        limit_reads_to_whitelist: bool,
-
-        load_coin: &mut Coin<CoinType>,
-        load_amount: u64,
-
-  */
   if (params.jobs.length > 8) {
     throw new Error(
       "Max Job limit exceeded. The create_feed_action can only create up to 8 jobs at a time."
@@ -1352,8 +1338,6 @@ export async function createFeed(
       result,
     ];
   }
-
-  throw new Error("No aggregator data created by create feed fn.");
 }
 
 // Create an oracle, oracle wallet, permisison, and set the heartbeat permission if user is the queue authority
@@ -1430,4 +1414,34 @@ async function getDynamicChildren(provider: JsonRpcProvider, objectId: string) {
     };
   }, {});
   return data;
+}
+
+export async function getAggregatorAuthorities(
+  provider: JsonRpcProvider,
+  userAddress: string
+): Promise<
+  {
+    aggregatorAddress: string; // aggregator address
+    authorityObjectId: string; // registered authority objectId for the aggregator
+  }[]
+> {
+  const objectsOwnedByUser = await provider.getObjectsOwnedByAddress(
+    userAddress
+  );
+  const authorityInfoObjects = objectsOwnedByUser.filter((obj) =>
+    obj.type.endsWith("aggregator::Authority")
+  );
+  const authorityData = await provider.getObjectBatch(
+    authorityInfoObjects.map((obj) => obj.objectId)
+  );
+
+  return authorityData.map((obj, idx) => {
+    const resp = getObjectExistsResponse(obj);
+    if ("fields" in resp.data) {
+      return {
+        aggregatorAddress: resp.data.fields.aggregator_address as string,
+        authorityObjectId: authorityInfoObjects[idx].objectId,
+      };
+    } else throw new Error("Err getting Authorities");
+  });
 }
