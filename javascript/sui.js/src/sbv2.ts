@@ -1,22 +1,21 @@
+import {
+  EventType,
+  getObjectExistsResponse,
+  getObjectFields,
+  JsonRpcProvider,
+  Keypair,
+  MoveCallTransaction,
+  RawSigner,
+  SignableTransaction,
+  SignerWithProvider,
+  SubscriptionId,
+  SuiEventEnvelope,
+  SuiExecuteTransactionResponse,
+} from "@mysten/sui.js";
 import { OracleJob } from "@switchboard-xyz/common";
 import Big from "big.js";
 import BN from "bn.js";
-import {
-  JsonRpcProvider,
-  SignableTransaction,
-  getObjectFields,
-  SuiEventEnvelope,
-  MoveCallTransaction,
-  RawSigner,
-  SignerWithProvider,
-  SuiExecuteTransactionResponse,
-  SubscriptionId,
-  Keypair,
-  EventType,
-  getObjectExistsResponse,
-} from "@mysten/sui.js";
 
-export { OracleJob, IOracleJob } from "@switchboard-xyz/common";
 export const SWITCHBOARD_DEVNET_ADDRESS = ``;
 export const SWITCHBOARD_TESTNET_ADDRESS = ``;
 export const SWITCHBOARD_MAINNET_ADDRESS = ``;
@@ -43,7 +42,7 @@ export class SuiDecimal {
 
   static fromBig(val: Big): SuiDecimal {
     const value = val.c.slice();
-    let e = val.e + 1;
+    const e = val.e + 1;
     while (value.length - e > 9) {
       value.pop();
     }
@@ -209,7 +208,7 @@ export type EventCallback = (
 
 // Cleanup for loadData
 const replaceObj = (obj: any) => {
-  for (let i in obj) {
+  for (const i in obj) {
     if (typeof obj[i] === "object") {
       replaceObj(obj[i]);
       if (obj[i] && "fields" in obj[i]) {
@@ -231,7 +230,7 @@ export async function sendSuiTx(
   txn: SignableTransaction,
   debug?: boolean
 ): Promise<SuiExecuteTransactionResponse> {
-  let txnRequest = await signer.dryRunTransaction(txn);
+  const txnRequest = await signer.dryRunTransaction(txn);
   if (txnRequest.status.error) {
     throw new Error(txnRequest.status.error);
   }
@@ -333,7 +332,7 @@ export class AggregatorAccount {
       (key: any) => new JobAccount(this.provider, key, this.switchboardAddress)
     );
     const promises: Array<Promise<OracleJob>> = [];
-    for (let job of jobs) {
+    for (const job of jobs) {
       promises.push(job.loadJob());
     }
     return await Promise.all(promises);
@@ -1253,7 +1252,7 @@ export async function createFeedTx(
   const { mantissa: vtMantissa, scale: vtScale } = SuiDecimal.fromBig(
     params.varianceThreshold ?? new Big(0)
   );
-  let jobs =
+  const jobs =
     params.jobs.length < 8
       ? [
           ...params.jobs,

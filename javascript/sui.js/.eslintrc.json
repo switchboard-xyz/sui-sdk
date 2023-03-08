@@ -1,0 +1,7 @@
+{
+  "extends": "@switchboard-xyz",
+  "rules": {
+    "quotes": "off",
+    "@typescript-eslint/ban-ts-comment": "off"
+  }
+}

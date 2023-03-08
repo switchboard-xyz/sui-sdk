@@ -36,6 +36,13 @@ To get started, clone the
 git clone https://github.com/switchboard-xyz/sbv2-sui
 ```
 
+Then install the dependencies
+
+```bash
+cd sbv2-sui
+pnpm install
+```
+
 ## Program IDs
 
 | **Network** | **Program ID**                               |
