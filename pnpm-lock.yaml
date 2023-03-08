@@ -16,7 +16,7 @@ importers:
     specifiers:
       '@mysten/sui.js': 0.29.1
       '@switchboard-xyz/common': ^2.1.33
-      '@switchboard-xyz/eslint-config': ^0.1.8
+      '@switchboard-xyz/eslint-config': latest
       '@types/big.js': ^6.1.6
       '@types/bn.js': ^5.1.0
       '@types/mocha': ^10.0.0
