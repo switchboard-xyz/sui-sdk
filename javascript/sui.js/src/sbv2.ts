@@ -441,10 +441,18 @@ export class AggregatorAccount {
     });
   }
 
-  addJobTx(params: AggregatorAddJobParams): SignableTransaction {
+  addJobTx(
+    params: Omit<AggregatorAddJobParams & JobInitParams, "job">
+  ): SignableTransaction {
     const txData = getSuiMoveCall(
-      `${this.switchboardAddress}::aggregator_add_job_action::run`,
-      [this.address, params.job, params.weight || 1]
+      `${this.switchboardAddress}::create_and_add_job_action::run`,
+      [
+        this.address,
+        params.name,
+        params.data,
+        params.weight || 1,
+        `${Math.floor(Date.now() / 1000)}`,
+      ]
     );
     return {
       kind: "moveCall",
@@ -622,7 +630,7 @@ export class AggregatorAccount {
     const txData = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_set_authority_action::run`,
       [this.address, authorityInfo.authorityObjectId, authority],
-      [this.coinType]
+      []
     );
     return {
       kind: "moveCall",
@@ -701,7 +709,7 @@ export class AggregatorAccount {
     const queueAddress: string = (await this.loadData()).queue_addr;
     const tx = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_escrow_deposit_action::run`,
-      [queueAddress, this.address, params.loadCoinId, params.loadAmount],
+      [queueAddress, this.address, params.loadCoinId, `${params.loadAmount}`],
       [this.coinType]
     );
     const signerWithProvider = new RawSigner(signer, this.provider);
@@ -719,7 +727,7 @@ export class AggregatorAccount {
     const queueAddress: string = (await this.loadData()).queue_addr;
     const tx = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_escrow_deposit_action::run`,
-      [queueAddress, this.address, params.loadCoinId, params.loadAmount],
+      [queueAddress, this.address, params.loadCoinId, `${params.loadAmount}`],
       [this.coinType]
     );
     return {
@@ -735,7 +743,7 @@ export class AggregatorAccount {
     const queueAddress: string = (await this.loadData()).queue_addr;
     const tx = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_escrow_withdraw_action::run`,
-      [queueAddress, this.address, params.amount],
+      [queueAddress, this.address, `${params.amount}`],
       [this.coinType]
     );
     const signerWithProvider = new RawSigner(signer, this.provider);
@@ -756,7 +764,7 @@ export class AggregatorAccount {
     const queueAddress: string = (await this.loadData()).queue_addr;
     const tx = getSuiMoveCall(
       `${this.switchboardAddress}::aggregator_escrow_withdraw_action::run`,
-      [queueAddress, this.address, params.amount],
+      [queueAddress, this.address, `${params.amount}`],
       [this.coinType]
     );
     return {

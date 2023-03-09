@@ -1,5 +1,4 @@
 module switchboard::math {
-    use switchboard::vec_utils;
     use std::vector;
 
     const EINCORRECT_STD_DEV: u64 = 0;
@@ -28,7 +27,6 @@ module switchboard::math {
         // expand nums out 
         num.value = scale_to_decimals(&num, MAX_DECIMALS);
         num.dec = MAX_DECIMALS;
-
         num
     }
 
@@ -85,126 +83,6 @@ module switchboard::math {
             little_floyd_rivest(v, size / 2, 0, size - 1)
         }
         
-    }
-
-    public fun std_deviation(medians: &vector<SwitchboardDecimal>, median: &SwitchboardDecimal): SwitchboardDecimal {
-
-        // length of decimals
-        let length = vector::length<SwitchboardDecimal>(medians);
-
-        // check that there are medians passed in
-        assert!(length != 0, ENO_LENGTH_PASSED_IN_STD_DEV);
-
-        // zero out response
-        let res = zero();
-        let distance = zero();
-        let variance = zero();
-
-        let i = 0;
-        while (i < length) {
-
-            // get median i
-            let median_i = vector::borrow<SwitchboardDecimal>(medians, i);
-
-            // subtract the median from the result
-            distance = sub(median_i, median);
-
-            // handle overflows
-            let skip = will_multiplication_overflow(distance.value, distance.value);
-            if (skip) {
-                i = i + 1;
-                continue
-            };
-
-            // square res (copies on each operation)
-            mul(
-                &distance, 
-                &distance,
-                &mut variance
-            );
-
-            // add distance to res, write it to distance
-            distance = add(&res, &variance);
-
-            res.value = distance.value;
-            res.dec = distance.dec;
-            res.neg = distance.neg;
-
-            // iterate
-            i = i + 1;
-        };
-
-        // divide by length
-        div(&res, &new((length as u128), 0, false), &mut distance);
-
-        // get sqrt
-        sqrt(&distance, &mut res);
-
-        res
-    }
-
-    public fun will_multiplication_overflow(a: u128, b: u128): bool {
-       b > 0 && a > MAX_VALUE_ALLOWED / b
-    }
-
-    public fun sort(v: &vector<SwitchboardDecimal>): vector<SwitchboardDecimal> {
-        let size = vector::length(v);
-        let alloc = vector::empty();
-        if (size <= 1) {
-            return *v
-        };
-
-        let (left, right) = vec_utils::esplit(v);
-        let left = sort(&left);
-        let right = sort(&right);
-   
-
-        loop {
-            let left_len = vector::length<SwitchboardDecimal>(&left);
-            let right_len = vector::length<SwitchboardDecimal>(&right);
-            if (left_len != 0 && right_len != 0) {
-                if (gt(vector::borrow<SwitchboardDecimal>(&right, 0), vector::borrow<SwitchboardDecimal>(&left, 0))) {
-                   vector::push_back<SwitchboardDecimal>(&mut alloc, vector::remove<SwitchboardDecimal>(&mut left, 0));
-                } else {
-                    vector::push_back<SwitchboardDecimal>(&mut alloc, vector::remove<SwitchboardDecimal>(&mut right, 0));
-                }
-            } else if (left_len != 0) {
-                vector::push_back<SwitchboardDecimal>(&mut alloc, vector::remove<SwitchboardDecimal>(&mut left, 0));
-            } else if (right_len != 0) {
-                vector::push_back<SwitchboardDecimal>(&mut alloc, vector::remove<SwitchboardDecimal>(&mut right, 0));
-            } else {
-                return alloc
-            };
-        }
-    }
-
-    public fun insertion_sort(v: &mut vector<SwitchboardDecimal>) {
-        let length = vector::length(v);
-        let i = 1;
-        while (i < length) {
-            let key = *vector::borrow<SwitchboardDecimal>(v, i);
-            let j = i - 1;
-            let cont = true;
-            while (j >= 0 && cont && gt(vector::borrow<SwitchboardDecimal>(v, j), &key)) {
-                
-                 *vector::borrow_mut<SwitchboardDecimal>(v, j + 1) = *vector::borrow<SwitchboardDecimal>(v, j);
-                 if (j == 0) {
-                    cont = false;
-                 } else {
-                    j = j - 1;
-                 }
-            };  
-
-            let swap_idx = if (!cont) {
-                0
-            } else {
-                j + 1
-            };
-            
-            *vector::borrow_mut<SwitchboardDecimal>(v, swap_idx) = key;
-
-            i = i + 1;
-        }; 
     }
 
     // By reference 
@@ -293,44 +171,6 @@ module switchboard::math {
         out.value = multiplied_scaled;
         out.dec = MAX_DECIMALS;
         out.neg = false;
-    }
-
-    // babylonian
-    public fun sqrt(num: &SwitchboardDecimal, out: &mut SwitchboardDecimal) {
-        let y = num;
-
-        // z = y
-        out.value = y.value;
-        out.neg = y.neg;
-        out.dec = y.dec;
-
-        // intermediate variables for outputs
-        let out1 = zero();
-        let two = new(2, 0, false);
-        let one = new(1, 0, false);
-
-        // x = y / 2 + 1
-        div(y, &two, &mut out1);
-        let x = add(&out1, &one);
-
-        // x < z && x != y
-        while (gt(out, &x) && x.value != 0 || equals(&x, y)) {
-            out.value = x.value;
-            out.dec = x.dec;
-            out.neg = x.neg; 
-
-            // x = (x + (y / x))) * 0.5
-            div(y, &x, &mut out1);
-            let out2 = add(&out1, &x);
-            div(&out2, &two, &mut x);
-        }
-    }
-
-    public fun normalize(num: &mut SwitchboardDecimal) {
-        while (num.value % 10 == 0 && num.dec > 0) {
-            num.value = num.value / 10;
-            num.dec = num.dec - 1;
-        };
     }
 
     public fun div(val1: &SwitchboardDecimal, val2: &SwitchboardDecimal, out: &mut SwitchboardDecimal) {
@@ -501,7 +341,6 @@ module switchboard::math {
 
     #[test(account = @0x1)]
     public entry fun test_math() {
-
         let vec: vector<SwitchboardDecimal> = vector::empty();
         vector::push_back(&mut vec, new(20000012342, 0, false));
         vector::push_back(&mut vec, new(20000012341, 0, false));
@@ -520,14 +359,6 @@ module switchboard::math {
         vector::push_back(&mut vec, new(20000012341, 0, false));
         vector::push_back(&mut vec, new(20000012342, 0, false));
         let median = median(&mut vec);
-
-
-        let sqrt = zero();
-        sqrt(&new(20000012342, 0, false), &mut sqrt);
-        std::debug::print(&sqrt);
-
         std::debug::print(&median);
-        let med = std_deviation(&mut vec, &mut median);
-        std::debug::print(&med);
     }
 }
