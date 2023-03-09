@@ -24,7 +24,7 @@ import {
 import * as fs from "fs";
 
 // devnet address
-const SWITCHBOARD_ADDRESS = "0xf09a67faa8938271e3b3c5bd4cd1c2c131ca82b7";
+const SWITCHBOARD_ADDRESS = "0x23ecb0df7bed0b4048f939298c9a179973e13d4e";
 
 const onAggregatorUpdate = (
   client: JsonRpcProvider,
@@ -79,6 +79,8 @@ let openRoundEventListener: SuiEvent;
     } catch (_e) {
       console.log(_e);
     }
+
+    console.log(keypair?.export().privateKey);
 
     // create new user
     const userAddress = `0x${keypair.getPublicKey().toSuiAddress()}`;
