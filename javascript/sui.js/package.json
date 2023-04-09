@@ -32,7 +32,7 @@
     "clean": "gts clean"
   },
   "dependencies": {
-    "@mysten/sui.js": "0.29.1",
+    "@mysten/sui.js": "0.31.0",
     "@switchboard-xyz/common": "^2.1.33",
     "big.js": "^6.2.1",
     "bn.js": "^5.2.1",
