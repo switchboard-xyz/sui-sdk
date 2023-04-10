@@ -2,12 +2,8 @@ import {
   getObjectFields,
   JsonRpcProvider,
   Keypair,
-  MoveCallTransaction,
   RawSigner,
-  TransactionArgument,
-  MoveCallSuiTransaction,
   SuiTransactionBlockResponse,
-  bcs,
   SignerWithProvider,
   SuiObjectResponse,
   SubscriptionId,
@@ -99,10 +95,19 @@ export interface AggregatorInitParams {
   limitReadsToWhitelist?: boolean;
 }
 
+interface AggregatorFastResultParams {
+  lastResult?: string;
+  oracleToken: string;
+  aggregatorToken: string;
+  value: Big;
+  now: number;
+}
+
 export interface AggregatorSaveResultParams {
   oracleAddress: string;
   oracleIdx: number;
   queueAddress: string;
+  quoteAddress?: string;
   value: Big;
 }
 
@@ -135,7 +140,10 @@ export interface AggregatorSetConfigParams {
   historySize?: number;
   readCharge?: number;
   rewardEscrow?: string;
+  // addresses to add to read whitelist (free readers)
   readWhitelist?: string[];
+  // remove from whitelist - this is due to underlying bag storage (which isn't iterable)
+  rmFromReadWhitelist?: string[];
   limitReadsToWhitelist?: boolean;
   coinType?: string;
 }
@@ -156,6 +164,8 @@ export interface OracleQueueInitParams {
   lockLeaseFunding: boolean;
   maxSize: number;
   coinType: string;
+  verificationQueueAddress?: string;
+  allowServiceQueueHeartbeats?: boolean;
 }
 
 export interface OracleQueueSetConfigsParams {
@@ -166,6 +176,9 @@ export interface OracleQueueSetConfigsParams {
   unpermissionedFeedsEnabled: boolean;
   lockLeaseFunding: boolean;
   coinType?: string;
+  verificationQueueAddress?: string;
+  allowServiceQueueHeartbeats?: boolean;
+  maxSize: number;
 }
 
 export interface LeaseExtendParams {
@@ -205,6 +218,29 @@ export interface PermissionSetParams {
   permission: SwitchboardPermission;
   enable: boolean;
   coinType?: string;
+}
+
+/*
+verifier_queue: address,
+    authority: address,
+        data: vector<u8>,
+        load_coin: &mut Coin<CoinType>, // must have funds for at least 1 quote verify
+        ctx: &mut TxContext,
+
+*/
+export interface QuoteInitParams {
+  verifierQueueAddress: string;
+  authority: string;
+  data: string; // byte array base64
+  loadCoin: string;
+}
+
+export interface QuoteUpdateParams {
+  verifierQueueAddress: string;
+  quoteAddress: string;
+  authority: string;
+  data: string; // byte array base64
+  loadCoin: string;
 }
 
 export type EventCallback = (
@@ -372,13 +408,13 @@ export class AggregatorAccount {
         tx.pure(params.batchSize, 'u64'),
         tx.pure(params.minOracleResults, 'u64'),
         tx.pure(params.minJobResults, 'u64'),
-        tx.pure(params.minUpdateDelaySeconds, "u64'"),
+        tx.pure(params.minUpdateDelaySeconds, 'u64'),
         tx.pure(vtMantissa, 'u128'),
         tx.pure(vtScale, 'u8'),
-        tx.pure(params.forceReportPeriod ?? 0, "u64'"),
-        tx.pure(params.disableCrank ?? false),
+        tx.pure(params.forceReportPeriod ?? 0, 'u64'),
+        tx.pure(params.disableCrank ?? false, 'bool'),
         tx.pure(params.historySize ?? 0, 'u64'),
-        tx.pure(params.readCharge ?? 0, "u64'"),
+        tx.pure(params.readCharge ?? 0, 'u64'),
         tx.pure(
           params.rewardEscrow
             ? params.rewardEscrow
@@ -386,7 +422,7 @@ export class AggregatorAccount {
           'address'
         ),
         tx.pure(params.readWhitelist ?? [], 'vector<address>'),
-        tx.pure(params.limitReadsToWhitelist ?? false),
+        tx.pure(params.limitReadsToWhitelist ?? false, 'bool'),
         tx.object(SUI_CLOCK_OBJECT_ID),
         tx.pure(params.authority, 'address'),
       ],
@@ -429,7 +465,7 @@ export class AggregatorAccount {
       arguments: [
         tx.object(this.address),
         tx.object(params.job),
-        tx.pure(params.weight || 1, 'u64'),
+        tx.pure(params.weight || 1, 'u8'),
       ],
     });
     return sendSuiTx(signerWithProvider, tx);
@@ -445,7 +481,7 @@ export class AggregatorAccount {
         tx.object(this.address),
         tx.pure(params.name, 'vector<u8>'),
         tx.pure(params.data, 'vector<u8>'),
-        tx.pure(params.weight || 1, 'u64'),
+        tx.pure(params.weight || 1, 'u8'),
         tx.object(SUI_CLOCK_OBJECT_ID),
       ],
     });
@@ -456,9 +492,36 @@ export class AggregatorAccount {
     const tx = new TransactionBlock();
     tx.moveCall({
       target: `${this.switchboardAddress}::aggregator_remove_job_action::run`,
-      arguments: [tx.object(this.address), tx.object(params.job)],
+      arguments: [tx.object(this.address), tx.pure(params.job, 'address')],
     });
     return tx;
+  }
+
+  // Either initialize a new result or build upon an existing one
+  async fastSaveResult(
+    signer: Keypair,
+    params: AggregatorFastResultParams
+  ): Promise<SuiTransactionBlockResponse> {
+    const { mantissa, scale, neg } = SuiDecimal.fromBig(params.value);
+    const tx = new TransactionBlock();
+    tx.moveCall({
+      target: `${
+        this.switchboardAddress
+      }::aggregator_fast_save_result_action::${
+        params.lastResult ? 'run' : 'initialize_result'
+      }`,
+      arguments: [
+        params.lastResult && tx.object(params.lastResult),
+        tx.object(params.oracleToken),
+        tx.object(params.aggregatorToken),
+        tx.pure(mantissa, 'u128'),
+        tx.pure(scale, 'u8'),
+        tx.pure(neg, 'bool'),
+        tx.pure(Math.floor(Date.now() / 1000), 'u64'),
+      ].filter((a) => Boolean(a)),
+    });
+    const signerWithProvider = new RawSigner(signer, this.provider);
+    return sendSuiTx(signerWithProvider, tx);
   }
 
   async saveResult(
@@ -470,10 +533,10 @@ export class AggregatorAccount {
       scale: valueScale,
       neg: valueNeg,
     } = SuiDecimal.fromBig(params.value);
-
+    const fn = params.quoteAddress ? 'run_with_tee' : 'run';
     const tx = new TransactionBlock();
     tx.moveCall({
-      target: `${this.switchboardAddress}::aggregator_save_result_action::run`,
+      target: `${this.switchboardAddress}::aggregator_save_result_action::${fn}`,
       arguments: [
         tx.object(params.oracleAddress),
         tx.pure(params.oracleIdx, 'u64'),
@@ -482,8 +545,9 @@ export class AggregatorAccount {
         tx.pure(valueMantissa, 'u128'),
         tx.pure(valueScale, 'u8'),
         tx.pure(valueNeg, 'bool'),
+        params.quoteAddress && tx.object(params.quoteAddress),
         tx.object(SUI_CLOCK_OBJECT_ID), // TODO Replace with Clock
-      ],
+      ].filter((a) => Boolean(a)),
       typeArguments: [this.coinType ?? '0x2::sui::SUI'],
     });
     const signerWithProvider = new RawSigner(signer, this.provider);
@@ -538,7 +602,7 @@ export class AggregatorAccount {
       arguments: [
         tx.object(this.address),
         tx.pure(params.name ?? aggregator.name, 'vector<u8>'),
-        tx.pure(params.queueAddress ?? aggregator.queue_addr, 'address'),
+        tx.object(params.queueAddress ?? aggregator.queue_addr),
         tx.pure(params.batchSize ?? aggregator.batch_size, 'u64'),
         tx.pure(
           params.minOracleResults ?? aggregator.min_oracle_results,
@@ -563,6 +627,7 @@ export class AggregatorAccount {
           params.readWhitelist ?? aggregator.read_whitelist,
           'vector<address>'
         ),
+        tx.pure(params.rmFromReadWhitelist ?? [], 'vector<address>'),
         tx.pure(
           params.limitReadsToWhitelist ?? aggregator.limit_reads_to_whitelist,
           'bool'
@@ -613,6 +678,7 @@ export class AggregatorAccount {
           params.readWhitelist ?? aggregator.read_whitelist,
           'vector<address>'
         ),
+        tx.pure(params.rmFromReadWhitelist ?? [], 'vector<address>'),
         tx.pure(
           params.limitReadsToWhitelist ?? aggregator.limit_reads_to_whitelist,
           'bool'
@@ -915,6 +981,7 @@ export class OracleAccount {
         tx.pure(params.name, 'vector<u8>'),
         tx.pure(params.authority, 'address'),
         tx.object(params.queue),
+        tx.object(SUI_CLOCK_OBJECT_ID),
       ],
       typeArguments: [params.coinType ?? '0x2::sui::SUI'],
     });
@@ -956,14 +1023,43 @@ export class OracleAccount {
    */
   async heartbeat(
     signer: Keypair,
-    queueId: string
+    queueId: string,
+    quote_addr?: string
   ): Promise<SuiTransactionBlockResponse> {
+    const fn = quote_addr ? 'run_with_tee' : 'run';
     const tx = new TransactionBlock();
     tx.moveCall({
-      target: `${this.switchboardAddress}::oracle_heartbeat_action::run`,
+      target: `${this.switchboardAddress}::oracle_heartbeat_action::${fn}`,
       arguments: [
         tx.object(this.address),
         tx.object(queueId),
+        quote_addr && tx.object(quote_addr),
+        tx.object(SUI_CLOCK_OBJECT_ID),
+      ].filter((a) => Boolean(a)),
+      typeArguments: [this.coinType],
+    });
+    const signerWithProvider = new RawSigner(signer, this.provider);
+    return sendSuiTx(signerWithProvider, tx);
+  }
+
+  /**
+   * Oracle Heartbeat Action
+   */
+  async fastHeartbeat(
+    signer: Keypair,
+    queueId: string,
+    token_addr: string,
+    quote_addr?: string
+  ): Promise<SuiTransactionBlockResponse> {
+    const fn = quote_addr ? 'run_with_tee_and_token' : 'run_with_token';
+    const tx = new TransactionBlock();
+    tx.moveCall({
+      target: `${this.switchboardAddress}::oracle_heartbeat_action::${fn}`,
+      arguments: [
+        tx.object(this.address),
+        tx.object(queueId),
+        quote_addr && tx.object(quote_addr),
+        tx.object(token_addr),
         tx.object(SUI_CLOCK_OBJECT_ID),
       ],
       typeArguments: [this.coinType],
@@ -981,10 +1077,57 @@ export class OracleAccount {
     tx.moveCall({
       target: `${this.switchboardAddress}::escrow_withdraw_action::run`,
       arguments: [
-        tx.object(this.address),
         tx.object(queueAddress),
-        tx.pure(params.amount, 'u128'),
+        tx.object(this.address),
+        tx.pure(params.amount, 'u64'),
       ],
+      typeArguments: [this.coinType],
+    });
+    const signerWithProvider = new RawSigner(signer, this.provider);
+    return sendSuiTx(signerWithProvider, tx);
+  }
+
+  // Create quote and get address
+  async quoteInit(signer: Keypair, params: QuoteInitParams): Promise<string> {
+    const tx = new TransactionBlock();
+    tx.moveCall({
+      target: `${this.switchboardAddress}::quote_init_action::run_simple`,
+      arguments: [
+        tx.object(params.verifierQueueAddress),
+        tx.pure(
+          params.authority ?? signer.getPublicKey().toSuiAddress(),
+          'address'
+        ),
+        tx.pure(params.data, 'vector<u8>'),
+        tx.object(params.loadCoin),
+      ],
+      typeArguments: [this.coinType],
+    });
+    const signerWithProvider = new RawSigner(signer, this.provider);
+    let result = await sendSuiTx(signerWithProvider, tx);
+    const quoteAddress = getObjectIdFromResponse(result, `quote::Quote`);
+    return quoteAddress;
+  }
+
+  // update quote
+  async quoteUpdate(
+    signer: Keypair,
+    params: QuoteUpdateParams
+  ): Promise<SuiTransactionBlockResponse> {
+    const tx = new TransactionBlock();
+    tx.moveCall({
+      target: `${this.switchboardAddress}::quote_update_action::run_simple`,
+      arguments: [
+        tx.object(params.verifierQueueAddress),
+        tx.pure(
+          params.authority ?? signer.getPublicKey().toSuiAddress(),
+          'address'
+        ),
+        tx.object(params.quoteAddress),
+        tx.pure(params.data, 'vector<u8>'),
+        tx.object(params.loadCoin),
+      ],
+      typeArguments: [this.coinType],
     });
     const signerWithProvider = new RawSigner(signer, this.provider);
     return sendSuiTx(signerWithProvider, tx);
@@ -1015,10 +1158,12 @@ export class OracleQueueAccount {
         tx.pure(params.authority, 'address'),
         tx.pure(params.name, 'vector<u8>'),
         tx.pure(params.oracleTimeout, 'u64'),
-        tx.pure(params.reward, 'u128'),
+        tx.pure(params.reward, 'u64'),
         tx.pure(params.unpermissionedFeedsEnabled, 'bool'),
         tx.pure(params.lockLeaseFunding, 'bool'),
         tx.pure(params.maxSize ?? 100, 'u64'),
+        tx.pure(params.verificationQueueAddress ?? '@0x0', 'address'),
+        tx.pure(params.allowServiceQueueHeartbeats ?? false, 'bool'),
         tx.object(SUI_CLOCK_OBJECT_ID),
       ],
       typeArguments: [params.coinType ?? '0x2::sui::SUI'],
@@ -1044,8 +1189,8 @@ export class OracleQueueAccount {
     // TODO - this will not work as-is
     const queueData = await this.loadData();
     const oracles = queueData.data;
-    const idx = oracles.findIndex((o: string) => o === oracleAddress);
-    return idx;
+    // TODO - this will not work as-is
+    return -1;
   }
 
   async setConfigs(
@@ -1057,16 +1202,18 @@ export class OracleQueueAccount {
       target: `${this.switchboardAddress}::oracle_queue_set_configs_action::run`,
       arguments: [
         tx.object(this.address),
-        tx.pure(params.name, 'vector<u8>'),
         tx.pure(params.authority, 'address'),
+        tx.pure(params.name, 'vector<u8>'),
         tx.pure(params.oracleTimeout, 'u64'),
         tx.pure(params.reward, 'u128'),
         tx.pure(params.unpermissionedFeedsEnabled, 'bool'),
         tx.pure(params.lockLeaseFunding, 'bool'),
+        tx.pure(params.maxSize, 'u64'),
+        tx.pure(params.verificationQueueAddress, 'address'),
+        tx.pure(params.allowServiceQueueHeartbeats, 'bool'),
       ],
       typeArguments: [params.coinType ?? '0x2::sui::SUI'],
     });
-
     const signerWithProvider = new RawSigner(signer, this.provider);
     return sendSuiTx(signerWithProvider, tx);
   }
@@ -1395,7 +1542,7 @@ export async function getAggregatorAuthorities(
     },
   });
 
-  return authorityData.map((obj, idx) => {
+  return authorityData.map((obj) => {
     const resp = getObjectFields(obj);
     return {
       aggregatorAddress: resp.aggregator_address as string,
