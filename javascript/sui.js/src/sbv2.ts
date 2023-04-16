@@ -1216,7 +1216,7 @@ export class OracleQueueAccount {
     switchboardAddress: string
   ): Promise<[OracleQueueAccount, SuiTransactionBlockResponse]> {
     const tx = new TransactionBlock();
-    let res = tx.moveCall({
+    const res = tx.moveCall({
       target: `${switchboardAddress}::oracle_queue_init_action::run`,
       arguments: [
         tx.pure(params.authority),
@@ -1234,7 +1234,6 @@ export class OracleQueueAccount {
     });
     const signerWithProvider = new RawSigner(signer, provider);
     const result = await sendSuiTx(signerWithProvider, tx);
-    console.log(JSON.stringify(result, null, 2));
     const queueId = await getObjectIdFromResponse(
       provider,
       result,
@@ -1259,7 +1258,6 @@ export class OracleQueueAccount {
       this.provider,
       queueData.data.contents
     );
-    console.log(oracles);
     return Object.values(oracles).indexOf(oracleAddress);
   }
 
@@ -1602,7 +1600,7 @@ export async function getTableData<K extends string, V>(
 ): Promise<Record<K, V>> {
   const results = await getDynamicChildren<string, any>(provider, value.id.id);
   let data: Record<string, V> = {};
-  let dat = results.reduce((prev, curr) => {
+  const dat = results.reduce((prev, curr) => {
     return {
       [curr.name]: curr.value,
       ...prev,
@@ -1618,7 +1616,7 @@ export async function getDynamicChildren<K extends string, V>(
 ): Promise<Record<K, V>[]> {
   let hasNext = true;
   let cursor: string | undefined;
-  let data: Record<string, any>[] = [];
+  const data: Record<string, any>[] = [];
   while (hasNext) {
     const childResults = await provider.getDynamicFields({
       parentId: objectId,
