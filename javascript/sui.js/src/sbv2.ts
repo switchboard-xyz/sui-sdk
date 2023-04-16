@@ -15,9 +15,17 @@ import Big from "big.js";
 import BN from "bn.js";
 import { sha3_256 } from "js-sha3";
 
+export const NULL_ADDRESS =
+  "0x0000000000000000000000000000000000000000000000000000000000000000";
 export const SWITCHBOARD_DEVNET_ADDRESS = ``;
 export const SWITCHBOARD_TESTNET_ADDRESS = ``;
 export const SWITCHBOARD_MAINNET_ADDRESS = ``;
+
+export type SuiObject =
+  | { kind: "Input"; index: number; type?: "object" | "pure"; value?: any }
+  | { kind: "GasCoin" }
+  | { kind: "Result"; index: number }
+  | { kind: "NestedResult"; index: number; resultIndex: number };
 
 export class SuiDecimal {
   constructor(
@@ -183,7 +191,8 @@ export interface OracleQueueSetConfigsParams {
 
 export interface LeaseExtendParams {
   queueAddress: string;
-  loadCoinId: string;
+  loadCoin?: string;
+  loadCoinObj?: SuiObject;
   loadAmount: number;
   coinType: string;
 }
@@ -232,7 +241,8 @@ export interface QuoteInitParams {
   verifierQueueAddress: string;
   authority: string;
   data: string; // byte array base64
-  loadCoin: string;
+  loadCoin?: string;
+  loadCoinObj?: SuiObject;
 }
 
 export interface QuoteUpdateParams {
@@ -240,7 +250,8 @@ export interface QuoteUpdateParams {
   quoteAddress: string;
   authority: string;
   data: string; // byte array base64
-  loadCoin: string;
+  loadCoin?: string;
+  loadCoinObj?: SuiObject;
 }
 
 export type EventCallback = (
@@ -271,22 +282,21 @@ export async function sendSuiTx(
   txn: TransactionBlock,
   debug?: boolean
 ): Promise<SuiTransactionBlockResponse> {
-  const txnRequest = await signer.dryRunTransactionBlock({
-    transactionBlock: txn,
-  });
-  if (txnRequest.effects.status.error) {
-    throw new Error(txnRequest.effects.status.error);
-  }
-  if (debug) {
-    console.info(txnRequest);
-  }
+  // const txnRequest = await signer.dryRunTransactionBlock({
+  //   transactionBlock: txn,
+  // });
+  // if (txnRequest.effects.status.error) {
+  //   throw new Error(txnRequest.effects.status.error);
+  // }
+  // if (debug) {
+  //   console.info(txnRequest);
+  // }
   return signer.signAndExecuteTransactionBlock({
     transactionBlock: txn,
     options: {
-      showInput: true,
-      showEffects: true,
       showEvents: true,
-      showObjectChanges: true,
+      showEffects: true,
+      showInput: true,
     },
   });
 }
@@ -364,11 +374,23 @@ export class AggregatorAccount {
       },
     });
     const childFields = await getDynamicChildren(this.provider, this.address);
+    const combinedChildren = childFields.reduce(
+      (acc: Record<string, any>, cur: Record<string, any>) => {
+        for (const key in cur) {
+          if (typeof cur[key] === "object" && !Array.isArray(cur[key])) {
+            acc[key] = { ...acc[key], ...cur[key] };
+          } else {
+            acc[key] = cur[key];
+          }
+        }
+        return acc;
+      },
+      {}
+    );
     const agg = {
-      ...childFields,
+      ...combinedChildren,
       ...getObjectFields(result),
     };
-    replaceObj(agg);
     return agg;
   }
 
@@ -403,7 +425,7 @@ export class AggregatorAccount {
     tx.moveCall({
       target: `${switchboardAddress}::aggregator_init_action::run`,
       arguments: [
-        tx.pure(params.name, "vector<u8>"),
+        tx.pure(params.name),
         tx.object(params.queueAddress),
         tx.pure(params.batchSize, "u64"),
         tx.pure(params.minOracleResults, "u64"),
@@ -430,7 +452,11 @@ export class AggregatorAccount {
     });
     const signerWithProvider = new RawSigner(signer, provider);
     const result = await sendSuiTx(signerWithProvider, tx);
-    const aggId = getObjectIdFromResponse(result, "aggregator::Aggregator");
+    const aggId = await getObjectIdFromResponse(
+      provider,
+      result,
+      "aggregator::Aggregator"
+    );
     return [
       new AggregatorAccount(
         provider,
@@ -472,15 +498,16 @@ export class AggregatorAccount {
   }
 
   addJobTx(
-    params: Omit<AggregatorAddJobParams & JobInitParams, "job">
+    params: Omit<AggregatorAddJobParams & JobInitParams, "job">,
+    txb?: TransactionBlock
   ): TransactionBlock {
-    const tx = new TransactionBlock();
+    const tx = txb || new TransactionBlock();
     tx.moveCall({
       target: `${this.switchboardAddress}::create_and_add_job_action::run`,
       arguments: [
         tx.object(this.address),
-        tx.pure(params.name, "vector<u8>"),
-        tx.pure(params.data, "vector<u8>"),
+        tx.pure(params.name),
+        tx.pure(params.data),
         tx.pure(params.weight || 1, "u8"),
         tx.object(SUI_CLOCK_OBJECT_ID),
       ],
@@ -488,8 +515,11 @@ export class AggregatorAccount {
     return tx;
   }
 
-  removeJobTx(params: AggregatorAddJobParams): TransactionBlock {
-    const tx = new TransactionBlock();
+  removeJobTx(
+    params: AggregatorAddJobParams,
+    txb?: TransactionBlock
+  ): TransactionBlock {
+    const tx = txb ?? new TransactionBlock();
     tx.moveCall({
       target: `${this.switchboardAddress}::aggregator_remove_job_action::run`,
       arguments: [tx.object(this.address), tx.pure(params.job, "address")],
@@ -526,15 +556,25 @@ export class AggregatorAccount {
 
   async saveResult(
     signer: Keypair,
-    params: AggregatorSaveResultParams
+    params: AggregatorSaveResultParams,
+    txb?: TransactionBlock
   ): Promise<SuiTransactionBlockResponse> {
+    const tx = this.saveResultTx(params, txb);
+    const signerWithProvider = new RawSigner(signer, this.provider);
+    return sendSuiTx(signerWithProvider, tx);
+  }
+
+  saveResultTx(
+    params: AggregatorSaveResultParams,
+    txb?: TransactionBlock
+  ): TransactionBlock {
     const {
       mantissa: valueMantissa,
       scale: valueScale,
       neg: valueNeg,
     } = SuiDecimal.fromBig(params.value);
     const fn = params.quoteAddress ? "run_with_tee" : "run";
-    const tx = new TransactionBlock();
+    const tx = txb ?? new TransactionBlock();
     tx.moveCall({
       target: `${this.switchboardAddress}::aggregator_save_result_action::${fn}`,
       arguments: [
@@ -550,39 +590,42 @@ export class AggregatorAccount {
       ].filter((a) => Boolean(a)),
       typeArguments: [this.coinType ?? "0x2::sui::SUI"],
     });
-    const signerWithProvider = new RawSigner(signer, this.provider);
-    return sendSuiTx(signerWithProvider, tx);
+    return tx;
   }
 
   async openInterval(
     signer: Keypair,
-    loadCoin: string
+    reward: number
   ): Promise<SuiTransactionBlockResponse> {
     const aggregatorData = await this.loadData();
     const tx = new TransactionBlock();
+    const [coin] = tx.splitCoins(tx.gas, [tx.pure(reward ?? 1000000)]);
     tx.moveCall({
       target: `${this.switchboardAddress}::aggregator_open_interval_action::run`,
       arguments: [
         tx.object(aggregatorData.queue_addr),
         tx.object(this.address),
-        tx.object(loadCoin),
+        coin,
       ],
       typeArguments: [this.coinType ?? "0x2::sui::SUI"],
     });
-
+    tx.transferObjects([coin], tx.pure(signer.getPublicKey().toSuiAddress()));
     const signerWithProvider = new RawSigner(signer, this.provider);
     return sendSuiTx(signerWithProvider, tx);
   }
 
-  async openIntervalTx(loadCoin: string): Promise<TransactionBlock> {
+  async openIntervalTx(
+    loadCoin: SuiObject,
+    txb?: TransactionBlock
+  ): Promise<TransactionBlock> {
     const aggregatorData = await this.loadData();
-    const tx = new TransactionBlock();
+    const tx = txb ?? new TransactionBlock();
     tx.moveCall({
       target: `${this.switchboardAddress}::aggregator_open_interval_action::run`,
       arguments: [
         tx.object(aggregatorData.queue_addr),
         tx.object(this.address),
-        tx.object(loadCoin),
+        loadCoin,
       ],
       typeArguments: [this.coinType ?? "0x2::sui::SUI"],
     });
@@ -590,18 +633,19 @@ export class AggregatorAccount {
   }
 
   async setConfigTx(
-    params: AggregatorSetConfigParams
+    params: AggregatorSetConfigParams,
+    txb?: TransactionBlock
   ): Promise<TransactionBlock> {
     const aggregator = await this.loadData();
     const { mantissa: vtMantissa, scale: vtScale } = SuiDecimal.fromBig(
       params.varianceThreshold ?? new Big(0)
     );
-    const tx = new TransactionBlock();
+    const tx = txb ?? new TransactionBlock();
     tx.moveCall({
       target: `${this.switchboardAddress}::aggregator_set_configs_action::run`,
       arguments: [
         tx.object(this.address),
-        tx.pure(params.name ?? aggregator.name, "vector<u8>"),
+        tx.pure(params.name ?? aggregator.name),
         tx.object(params.queueAddress ?? aggregator.queue_addr),
         tx.pure(params.batchSize ?? aggregator.batch_size, "u64"),
         tx.pure(
@@ -652,7 +696,7 @@ export class AggregatorAccount {
       target: `${this.switchboardAddress}::aggregator_set_configs_action::run`,
       arguments: [
         tx.object(this.address),
-        tx.pure(params.name ?? aggregator.name, "vector<u8>"),
+        tx.pure(params.name ?? aggregator.name),
         tx.pure(params.queueAddress ?? aggregator.queue_addr, "address"),
         tx.pure(params.batchSize ?? aggregator.batch_size, "u64"),
         tx.pure(
@@ -690,7 +734,10 @@ export class AggregatorAccount {
     return sendSuiTx(signerWithProvider, tx);
   }
 
-  async setAuthorityTx(authority: string): Promise<TransactionBlock> {
+  async setAuthorityTx(
+    authority: string,
+    txb?: TransactionBlock
+  ): Promise<TransactionBlock> {
     const aggregatorData = await this.loadData();
     const authorityInfo = (
       await getAggregatorAuthorities(
@@ -699,7 +746,7 @@ export class AggregatorAccount {
         aggregatorData.authority
       )
     ).find((a) => a.aggregatorAddress === this.address);
-    const tx = new TransactionBlock();
+    const tx = txb ?? new TransactionBlock();
     tx.moveCall({
       target: `${this.switchboardAddress}::aggregator_set_authority_action::run`,
       arguments: [
@@ -771,16 +818,18 @@ export class AggregatorAccount {
   ): Promise<SuiTransactionBlockResponse> {
     const queueAddress: string = (await this.loadData()).queue_addr;
     const tx = new TransactionBlock();
+    const [coin] = tx.splitCoins(tx.gas, [tx.pure(params.loadAmount)]);
     tx.moveCall({
       target: `${this.switchboardAddress}::aggregator_escrow_deposit_action::run`,
       arguments: [
         tx.object(queueAddress),
         tx.object(this.address),
-        tx.object(params.loadCoinId),
+        coin,
         tx.pure(params.loadAmount),
       ],
       typeArguments: [this.coinType ?? "0x2::sui::SUI"],
     });
+    tx.transferObjects([coin], tx.pure(signer.getPublicKey().toSuiAddress()));
     const signerWithProvider = new RawSigner(signer, this.provider);
     return sendSuiTx(signerWithProvider, tx);
   }
@@ -789,15 +838,18 @@ export class AggregatorAccount {
    * Extend a lease tx
    * @param params LeaseExtendParams
    */
-  async extendTx(params: LeaseExtendParams): Promise<TransactionBlock> {
+  async extendTx(
+    params: LeaseExtendParams,
+    txb?: TransactionBlock
+  ): Promise<TransactionBlock> {
     const queueAddress: string = (await this.loadData()).queue_addr;
-    const tx = new TransactionBlock();
+    const tx = txb ?? new TransactionBlock();
     tx.moveCall({
       target: `${this.switchboardAddress}::aggregator_escrow_deposit_action::run`,
       arguments: [
         tx.object(queueAddress),
         tx.object(this.address),
-        tx.object(params.loadCoinId),
+        params.loadCoin ? tx.object(params.loadCoin) : params.loadCoinObj,
         tx.pure(params.loadAmount),
       ],
       typeArguments: [this.coinType ?? "0x2::sui::SUI"],
@@ -828,9 +880,12 @@ export class AggregatorAccount {
    * withdraw a lease tx
    * @param params LeaseWithdrawParams
    */
-  async withdrawTx(params: LeaseWithdrawParams): Promise<TransactionBlock> {
+  async withdrawTx(
+    params: LeaseWithdrawParams,
+    txb?: TransactionBlock
+  ): Promise<TransactionBlock> {
     const queueAddress: string = (await this.loadData()).queue_addr;
-    const tx = new TransactionBlock();
+    const tx = txb ?? new TransactionBlock();
     tx.moveCall({
       target: `${this.switchboardAddress}::aggregator_escrow_withdraw_action::run`,
       arguments: [
@@ -919,14 +974,14 @@ export class JobAccount {
     tx.moveCall({
       target: `${switchboardAddress}::job_init_action::run`,
       arguments: [
-        tx.pure(params.name, "vector<u8>"),
-        tx.pure(params.data, "vector<u8>"),
+        tx.pure(params.name),
+        tx.pure(params.data),
         tx.object(SUI_CLOCK_OBJECT_ID),
       ],
     });
     const signerWithProvider = new RawSigner(signer, provider);
     const result = await sendSuiTx(signerWithProvider, tx);
-    const jobId = getObjectIdFromResponse(result, "job::Job");
+    const jobId = await getObjectIdFromResponse(provider, result, "job::Job");
 
     return [new JobAccount(provider, jobId, switchboardAddress), result];
   }
@@ -945,8 +1000,8 @@ export class JobAccount {
     tx.moveCall({
       target: `${switchboardAddress}::job_init_action::run`,
       arguments: [
-        tx.pure(params.name, "vector<u8>"),
-        tx.pure(params.data, "vector<u8>"),
+        tx.pure(params.name),
+        tx.pure(params.data),
         tx.object(SUI_CLOCK_OBJECT_ID),
       ],
     });
@@ -978,7 +1033,7 @@ export class OracleAccount {
     tx.moveCall({
       target: `${switchboardAddress}::oracle_init_action::run`,
       arguments: [
-        tx.pure(params.name, "vector<u8>"),
+        tx.pure(params.name),
         tx.pure(params.authority, "address"),
         tx.object(params.queue),
         tx.object(SUI_CLOCK_OBJECT_ID),
@@ -987,7 +1042,11 @@ export class OracleAccount {
     });
     const signerWithProvider = new RawSigner(signer, provider);
     const result = await sendSuiTx(signerWithProvider, tx);
-    const oracleId = getObjectIdFromResponse(result, `oracle::Oracle`);
+    const oracleId = await getObjectIdFromResponse(
+      provider,
+      result,
+      `oracle::Oracle`
+    );
 
     return [
       new OracleAccount(
@@ -1090,6 +1149,7 @@ export class OracleAccount {
   // Create quote and get address
   async quoteInit(signer: Keypair, params: QuoteInitParams): Promise<string> {
     const tx = new TransactionBlock();
+
     tx.moveCall({
       target: `${this.switchboardAddress}::quote_init_action::run_simple`,
       arguments: [
@@ -1098,14 +1158,18 @@ export class OracleAccount {
           params.authority ?? signer.getPublicKey().toSuiAddress(),
           "address"
         ),
-        tx.pure(params.data, "vector<u8>"),
-        tx.object(params.loadCoin),
+        tx.pure(params.data),
+        params.loadCoin ? tx.object(params.loadCoin) : params.loadCoinObj,
       ],
       typeArguments: [this.coinType],
     });
     const signerWithProvider = new RawSigner(signer, this.provider);
     const result = await sendSuiTx(signerWithProvider, tx);
-    const quoteAddress = getObjectIdFromResponse(result, `quote::Quote`);
+    const quoteAddress = await getObjectIdFromResponse(
+      this.provider,
+      result,
+      `quote::Quote`
+    );
     return quoteAddress;
   }
 
@@ -1124,8 +1188,8 @@ export class OracleAccount {
           "address"
         ),
         tx.object(params.quoteAddress),
-        tx.pure(params.data, "vector<u8>"),
-        tx.object(params.loadCoin),
+        tx.pure(params.data),
+        params.loadCoin ? tx.object(params.loadCoin) : params.loadCoinObj,
       ],
       typeArguments: [this.coinType],
     });
@@ -1152,25 +1216,27 @@ export class OracleQueueAccount {
     switchboardAddress: string
   ): Promise<[OracleQueueAccount, SuiTransactionBlockResponse]> {
     const tx = new TransactionBlock();
-    tx.moveCall({
+    let res = tx.moveCall({
       target: `${switchboardAddress}::oracle_queue_init_action::run`,
       arguments: [
-        tx.pure(params.authority, "address"),
-        tx.pure(params.name, "vector<u8>"),
-        tx.pure(params.oracleTimeout, "u64"),
-        tx.pure(params.reward, "u64"),
-        tx.pure(params.unpermissionedFeedsEnabled, "bool"),
-        tx.pure(params.lockLeaseFunding, "bool"),
-        tx.pure(params.maxSize ?? 100, "u64"),
-        tx.pure(params.verificationQueueAddress ?? "@0x0", "address"),
-        tx.pure(params.allowServiceQueueHeartbeats ?? false, "bool"),
+        tx.pure(params.authority),
+        tx.pure(params.name),
+        tx.pure(params.oracleTimeout),
+        tx.pure(params.reward),
+        tx.pure(params.unpermissionedFeedsEnabled),
+        tx.pure(params.lockLeaseFunding),
+        tx.pure(params.maxSize ?? 100),
+        tx.pure(params.verificationQueueAddress ?? NULL_ADDRESS),
+        tx.pure(params.allowServiceQueueHeartbeats ?? false),
         tx.object(SUI_CLOCK_OBJECT_ID),
       ],
       typeArguments: [params.coinType ?? "0x2::sui::SUI"],
     });
     const signerWithProvider = new RawSigner(signer, provider);
     const result = await sendSuiTx(signerWithProvider, tx);
-    const queueId = getObjectIdFromResponse(
+    console.log(JSON.stringify(result, null, 2));
+    const queueId = await getObjectIdFromResponse(
+      provider,
       result,
       `oracle_queue::OracleQueue<0x2::sui::SUI>`
     );
@@ -1186,11 +1252,15 @@ export class OracleQueueAccount {
   }
 
   async findOracleIdx(oracleAddress: string): Promise<number> {
-    // TODO - this will not work as-is
     const queueData = await this.loadData();
-    const oracles = queueData.data;
-    // TODO - this will not work as-is
-    return -1;
+
+    // get table data
+    const oracles = await getTableData<string, string>(
+      this.provider,
+      queueData.data.contents
+    );
+    console.log(oracles);
+    return Object.values(oracles).indexOf(oracleAddress);
   }
 
   async setConfigs(
@@ -1203,7 +1273,7 @@ export class OracleQueueAccount {
       arguments: [
         tx.object(this.address),
         tx.pure(params.authority, "address"),
-        tx.pure(params.name, "vector<u8>"),
+        tx.pure(params.name),
         tx.pure(params.oracleTimeout, "u64"),
         tx.pure(params.reward, "u128"),
         tx.pure(params.unpermissionedFeedsEnabled, "bool"),
@@ -1300,7 +1370,8 @@ export class Permission {
 
     const signerWithProvider = new RawSigner(signer, provider);
     const result = await sendSuiTx(signerWithProvider, tx);
-    const permissionId = getObjectIdFromResponse(
+    const permissionId = await getObjectIdFromResponse(
+      provider,
       result,
       `permission::Permission`
     );
@@ -1357,18 +1428,21 @@ function safeDiv(number_: Big, denominator: Big, decimals = 20): Big {
 
 interface CreateFeedParams extends AggregatorInitParams {
   jobs: JobInitParams[];
-  loadCoin: string;
+  loadCoin?: string;
+  loadCoinObj?: SuiObject;
   initialLoadAmount: number;
 }
 
 interface CreateOracleParams extends OracleInitParams {
-  loadCoin: string;
+  loadCoin?: string;
+  loadCoinObj?: SuiObject;
   loadAmount: number;
 }
 
 export async function createFeedTx(
   params: CreateFeedParams,
-  switchboardAddress: string
+  switchboardAddress: string,
+  txb?: TransactionBlock
 ): Promise<TransactionBlock> {
   if (params.jobs.length > 8) {
     throw new Error(
@@ -1390,34 +1464,38 @@ export async function createFeedTx(
         ]
       : params.jobs;
 
-  const tx = new TransactionBlock();
+  const tx = txb ?? new TransactionBlock();
+
+  const loadCoin = params.loadCoin
+    ? tx.object(params.loadCoin)
+    : params.loadCoinObj;
   tx.moveCall({
     target: `${switchboardAddress}::create_feed_action::run`,
     arguments: [
-      tx.pure(params.authority, "address"),
+      tx.pure(params.authority),
       tx.object(SUI_CLOCK_OBJECT_ID),
-      tx.pure(params.name, "string"),
+      tx.pure(params.name),
       tx.object(params.queueAddress),
-      tx.pure(params.batchSize, "u64"),
-      tx.pure(params.minOracleResults, "u64"),
-      tx.pure(params.minJobResults, "u64"),
-      tx.pure(params.minUpdateDelaySeconds, "u64"),
-      tx.pure(vtMantissa, "u128"),
-      tx.pure(vtScale, "u8"),
-      tx.pure(params.forceReportPeriod ?? 0, "u64"),
-      tx.pure(params.disableCrank ?? false, "bool"),
-      tx.pure(params.historySize ?? 0, "u64"),
-      tx.pure(params.readCharge ?? 0, "u64"),
-      tx.pure(params.rewardEscrow ?? params.authority, "address"),
-      tx.pure(params.readWhitelist ?? [], "vector<address>"),
-      tx.pure(params.limitReadsToWhitelist ?? false, "bool"),
-      tx.object(params.loadCoin),
-      tx.pure(params.initialLoadAmount.toString(), "u64"),
+      tx.pure(params.batchSize),
+      tx.pure(params.minOracleResults),
+      tx.pure(params.minJobResults),
+      tx.pure(params.minUpdateDelaySeconds),
+      tx.pure(vtMantissa),
+      tx.pure(vtScale),
+      tx.pure(params.forceReportPeriod ?? 0),
+      tx.pure(params.disableCrank ?? false),
+      tx.pure(params.historySize ?? 0),
+      tx.pure(params.readCharge ?? 0),
+      tx.pure(params.rewardEscrow ?? params.authority),
+      tx.pure(params.readWhitelist ?? []),
+      tx.pure(params.limitReadsToWhitelist ?? false),
+      loadCoin,
+      tx.pure(params.initialLoadAmount),
       // jobs
       ...jobs.flatMap((jip) => {
         return [
-          tx.pure(jip.name, "vector<u8>"),
-          tx.pure(jip.data, "vector<u8>"),
+          tx.pure(jip.name),
+          tx.pure(jip.data),
           tx.pure(`${jip.weight || 1}`),
         ];
       }),
@@ -1434,10 +1512,22 @@ export async function createFeed(
   params: CreateFeedParams,
   switchboardAddress: string
 ): Promise<[AggregatorAccount, SuiTransactionBlockResponse]> {
-  const txn = await createFeedTx(params, switchboardAddress);
+  const txb = new TransactionBlock();
+  const [coin] = txb.splitCoins(txb.gas, [txb.pure(params.initialLoadAmount)]);
+  if (!params.loadCoin && !params.loadCoinObj) {
+    params.loadCoinObj = coin;
+  }
+  const txn = await createFeedTx(params, switchboardAddress, txb);
+  txn.transferObjects([coin], txn.pure(params.authority)); // send any remaining gas to the authority
   const signerWithProvider = new RawSigner(signer, provider);
+
   const result = await sendSuiTx(signerWithProvider, txn);
-  const aggId = getObjectIdFromResponse(result, "aggregator::Aggregator");
+  const aggId = await getObjectIdFromResponse(
+    provider,
+    result,
+    "aggregator::Aggregator"
+  );
+
   return [
     new AggregatorAccount(
       provider,
@@ -1457,21 +1547,27 @@ export async function createOracle(
   switchboardAddress: string
 ): Promise<[OracleAccount, SuiTransactionBlockResponse]> {
   const tx = new TransactionBlock();
+  const [coin] = tx.splitCoins(tx.gas, [tx.pure(10000)]);
   tx.moveCall({
     target: `${switchboardAddress}::create_oracle_action::run`,
     arguments: [
-      tx.pure(params.name, "string"),
-      tx.pure(params.authority, "address"),
+      tx.pure(params.name),
+      tx.pure(params.authority),
       tx.object(params.queue),
-      tx.object(params.loadCoin),
-      tx.pure(`${params.loadAmount}`),
+      coin,
+      tx.pure(params.loadAmount),
       tx.object(SUI_CLOCK_OBJECT_ID),
     ],
     typeArguments: [params.coinType ?? "0x2::sui::SUI"],
   });
+  tx.transferObjects([coin], tx.pure(params.authority));
   const signerWithProvider = new RawSigner(signer, provider);
   const result = await sendSuiTx(signerWithProvider, tx);
-  const oracleId = getObjectIdFromResponse(result, `oracle::Oracle`);
+  const oracleId = await getObjectIdFromResponse(
+    provider,
+    result,
+    `oracle::Oracle`
+  );
   return [
     new OracleAccount(
       provider,
@@ -1483,36 +1579,71 @@ export async function createOracle(
   ];
 }
 
-async function getDynamicChildren(provider: JsonRpcProvider, objectId: string) {
-  const childResults = await provider.getDynamicFields({
-    parentId: objectId,
-  });
-  const children = await Promise.all(
-    childResults.data.map(async (res) => {
-      const data = await provider.getObject({
-        id: res.objectId,
+export async function getBagData(
+  provider: JsonRpcProvider,
+  value: {
+    id: {
+      id: string;
+    };
+    size: number;
+  }
+): Promise<Record<string, any>> {
+  return getTableData<string, any>(provider, value);
+}
+
+export async function getTableData<K extends string, V>(
+  provider: JsonRpcProvider,
+  value: {
+    id: {
+      id: string;
+    };
+    size: number;
+  }
+): Promise<Record<K, V>> {
+  const results = await getDynamicChildren<string, any>(provider, value.id.id);
+  let data: Record<string, V> = {};
+  let dat = results.reduce((prev, curr) => {
+    return {
+      [curr.name]: curr.value,
+      ...prev,
+    };
+  }, {});
+  data = { ...data, ...dat };
+  return data;
+}
+
+export async function getDynamicChildren<K extends string, V>(
+  provider: JsonRpcProvider,
+  objectId: string
+): Promise<Record<K, V>[]> {
+  let hasNext = true;
+  let cursor: string | undefined;
+  let data: Record<string, any>[] = [];
+  while (hasNext) {
+    const childResults = await provider.getDynamicFields({
+      parentId: objectId,
+      cursor,
+    });
+
+    hasNext = childResults.hasNextPage;
+    cursor = childResults.nextCursor;
+    const results = (
+      await provider.multiGetObjects({
+        ids: childResults.data.map((d) => d.objectId),
         options: {
           showType: true,
           showContent: true,
           showOwner: true,
         },
+      })
+    )
+      .map((result) => result.data.content)
+      .map((content) => {
+        if ("fields" in content) {
+          data.push(content.fields);
+        }
       });
-      return getObjectFields(data);
-    })
-  );
-  const r = await Promise.all(
-    children.map(async (res) => {
-      return res;
-    })
-  );
-
-  // smash the data into the same object
-  const data = r.reduce((prev, curr) => {
-    return {
-      ...curr,
-      ...prev,
-    };
-  }, {});
+  }
   return data;
 }
 
@@ -1559,14 +1690,37 @@ export function getFieldsFromObjectResponse(
   } else throw new Error("Err getting fields");
 }
 
-export function getObjectIdFromResponse(
+export async function getObjectIdFromResponse(
+  provider: JsonRpcProvider,
   response: SuiTransactionBlockResponse,
   type: string
-): string {
-  response.objectChanges?.forEach((obj) => {
-    if (obj.type === "created" && obj.objectType.endsWith(type)) {
-      return obj.objectId;
+): Promise<string> {
+  let id: string;
+  const objs = (
+    response.effects?.created?.map((obj) => {
+      if (obj.reference.objectId) {
+        return obj.reference.objectId;
+      }
+    }) || []
+  ).filter((obj) => Boolean(obj));
+
+  // try 10 times over 10 seconds to fetch the data
+  return await new Promise(async (resolve) => {
+    let i = 0;
+    while (i < 10) {
+      const created = await provider.multiGetObjects({
+        ids: objs,
+        options: {
+          showType: true,
+        },
+      });
+      const objOfType = created.filter((obj) => obj.data?.type.endsWith(type));
+      if (!objOfType.length) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      } else {
+        return resolve(objOfType.pop().data.objectId);
+      }
+      i += 1;
     }
   });
-  throw new Error("Could not find object id");
 }

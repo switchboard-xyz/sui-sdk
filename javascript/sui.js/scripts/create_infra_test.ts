@@ -8,37 +8,37 @@ import { Buffer } from "buffer";
 import {
   AggregatorAccount,
   OracleQueueAccount,
-  OracleJob,
   SuiEvent,
   EventCallback,
   createFeed,
+  OracleAccount,
   createOracle,
-} from "../lib/cjs";
+} from "../src/sbv2";
 import {
   Ed25519Keypair,
   JsonRpcProvider,
-  getObjectFields,
+  testnetConnection,
+  fromB64,
   Connection,
-  devnetConnection,
+  TransactionBlock,
 } from "@mysten/sui.js";
+import { OracleJob } from "@switchboard-xyz/common";
 import * as fs from "fs";
-
-// devnet address
-const SWITCHBOARD_ADDRESS = "0x23ecb0df7bed0b4048f939298c9a179973e13d4e";
+import { SWITCHBOARD_ADDRESS, RPC } from "./common";
 
 const onAggregatorUpdate = (
   client: JsonRpcProvider,
   cb: EventCallback
 ): SuiEvent => {
   return AggregatorAccount.watch(
-    new JsonRpcProvider(devnetConnection),
+    new JsonRpcProvider(testnetConnection),
     SWITCHBOARD_ADDRESS,
     cb
   );
 };
 
 const updateEventListener = onAggregatorUpdate(
-  new JsonRpcProvider(devnetConnection),
+  new JsonRpcProvider(testnetConnection),
   async (e) => {
     console.log(`NEW RESULT:`, JSON.stringify(e));
   }
@@ -66,91 +66,133 @@ let openRoundEventListener: SuiEvent;
 // run it all at once
 (async () => {
   try {
+    const connection = new Connection({
+      fullnode: RPC,
+    });
     // connect to Devnet
-    const provider = new JsonRpcProvider(devnetConnection);
+    const provider = new JsonRpcProvider(connection);
     let keypair: Ed25519Keypair | null = null;
 
     // if file extension ends with yaml
     try {
-      const parsed = fs.readFileSync("./sui-secret.txt", {
-        encoding: "utf8",
-      });
-      keypair = Ed25519Keypair.fromSecretKey(Buffer.from(parsed, "hex"));
+      const parsed = fs.readFileSync("./sui-secret.txt");
+      console.log(parsed);
+      let str = fromB64(parsed.toString()).slice(1);
+      keypair = Ed25519Keypair.fromSecretKey(str);
     } catch (_e) {
       console.log(_e);
     }
 
-    console.log(keypair?.export().privateKey);
-
     // create new user
-    const userAddress = `0x${keypair.getPublicKey().toSuiAddress()}`;
+    const userAddress = keypair.getPublicKey().toSuiAddress();
 
-    try {
-      // get tokens from the DevNet faucet server
-      await provider.requestSuiFromFaucet(
-        keypair.getPublicKey().toSuiAddress()
-      );
-    } catch (e) {}
+    // try {
+    //   // get tokens from the DevNet faucet server
+    //   const tx = await provider.requestSuiFromFaucet(
+    //     keypair.getPublicKey().toSuiAddress()
+    //   );
+    //   console.log(tx);
+    // } catch (e) {
+    //   console.log(e);
+    // }
 
     console.log(`User account ${userAddress} created + funded.`);
 
-    const coins = await provider.selectCoinsWithBalanceGreaterThanOrEqual(
-      userAddress,
-      BigInt(1000)
-    );
+    // const [queue, queueTxHash] = await OracleQueueAccount.init(
+    //   provider,
+    //   keypair,
+    //   {
+    //     name: "switchboard unpermissioned queue",
+    //     authority: userAddress,
+    //     oracleTimeout: 300000,
+    //     reward: 0,
+    //     unpermissionedFeedsEnabled: true,
+    //     lockLeaseFunding: false,
+    //     maxSize: 1000,
+    //     coinType: "0x2::sui::SUI",
+    //   },
+    //   SWITCHBOARD_ADDRESS
+    // );
 
-    const coin: any = coins.pop();
+    /**
+     
+    0x05cfa5efd53ff059d04b7d39ab37ceb384b00b755d31d14bf7ff6260dca9062d
+{
+  authority: '0xc9c8e0d738d7f090144847b38a8283fbe8050923875771b8c315a461721c04a4',
+  created_at: '1681597751',
+  escrows: {
+    id: {
+      id: '0xbd8c934cd64c5caf935dc629064b24ace6d509d5b0070f572a73dca709f6f18a'
+    },
+    size: '1'
+  },
+  id: {
+    id: '0x44ffa55891669c2b377d75a6f7932f2f70556cac5772870e988207a79352fa47'
+  },
+  name: [
+    '83',  '119', '105', '116',
+    '99',  '104', '98',  '111',
+    '97',  '114', '100', '32',
+    '79',  '114', '97',  '99',
+    '108', '101', '65',  '99',
+    '99',  '111', '117', '110',
+    '116'
+  ],
+  num_rows: '0',
+  queue_addr: '0x738e508cf1eb3387c51ba9efe415adafe9e5eb5bad45fdad4a03ea0b51dafad3',
+  token_addr: '0xe0b70bac6fcf0ad866689da7cb670295b5b47412cb90209227b58f95343af212'
+}
+     * 
+     * 
+     */
 
-    const [queue, queueTxHash] = await OracleQueueAccount.init(
+    const queue = new OracleQueueAccount(
       provider,
-      keypair,
-      {
-        name: "switchboard unpermissioned queue",
-        authority: userAddress,
-        oracleTimeout: 3000,
-        reward: 0,
-        unpermissionedFeedsEnabled: true,
-        lockLeaseFunding: false,
-        maxSize: 1000,
-        coinType: "0x2::sui::SUI",
-      },
+      "0x738e508cf1eb3387c51ba9efe415adafe9e5eb5bad45fdad4a03ea0b51dafad3",
       SWITCHBOARD_ADDRESS
     );
 
-    console.log(
-      `Oracle Queue ${queue.address} created. tx hash: ${queueTxHash}`
-    );
-    const [oracle, oracleTxHash] = await createOracle(
+    // const [oracle, oracleTxHash] = await createOracle(
+    //   provider,
+    //   keypair,
+    //   {
+    //     name: "Switchboard OracleAccount",
+    //     authority: userAddress,
+    //     queue:
+    //       "0x738e508cf1eb3387c51ba9efe415adafe9e5eb5bad45fdad4a03ea0b51dafad3", //
+    //     loadCoin: coin,
+    //     loadAmount: 1, // 1 mist
+    //     coinType: "0x2::sui::SUI",
+    //   },
+    //   SWITCHBOARD_ADDRESS
+    // );
+    const oracle = new OracleAccount(
       provider,
-      keypair,
-      {
-        name: "Switchboard OracleAccount",
-        authority: userAddress,
-        queue: queue.address, //
-        loadCoin: coin.details.reference.objectId,
-        loadAmount: 0,
-        coinType: "0x2::sui::SUI",
-      },
+      "0x44ffa55891669c2b377d75a6f7932f2f70556cac5772870e988207a79352fa47",
       SWITCHBOARD_ADDRESS
     );
     console.log(await oracle.loadData());
-    console.log(`Oracle ${oracle.address} created. tx hash: ${oracleTxHash}`);
+    //console.log(`Oracle ${oracle.address} created. tx hash: ${oracleTxHash}`);
+
+    // wait 10s
+    // await new Promise((r) => setTimeout(r, 10000));
+
     // first heartbeat
-    const heartbeatTxHash = await oracle.heartbeat(keypair, queue.address);
-    console.log("First Heartbeat Tx Hash:", heartbeatTxHash);
+    // const heartbeatTxHash = await oracle.heartbeat(keypair, queue.address);
+    // console.log("First Heartbeat Tx Hash:", heartbeatTxHash);
 
     // get oracle index
     const oracleIdx = await queue.findOracleIdx(oracle.address);
 
     // heartbeat every 30 seconds
-    setInterval(async () => {
-      try {
-        const heartbeatTxHash = await oracle.heartbeat(keypair, queue.address);
-        console.log("Heartbeat Tx Hash:", heartbeatTxHash);
-      } catch (e) {
-        console.log(e, "failed heartbeat");
-      }
-    }, 30000);
+    // setInterval(async () => {
+    //   try {
+    //     const heartbeatTxHash = await oracle.heartbeat(keypair, queue.address);
+    //     console.log("Heartbeat Tx Hash:", heartbeatTxHash);
+    //   } catch (e) {
+    //     console.log(e, "failed heartbeat");
+    //   }
+    // }, 30000);
 
     // Make JobAccount data for btc price
     const serializedJob1 = Buffer.from(
@@ -186,7 +228,6 @@ let openRoundEventListener: SuiEvent;
         forceReportPeriod: 0,
         coinType: "0x2::sui::SUI",
         initialLoadAmount: 1,
-        loadCoin: coin.details.reference.objectId,
         jobs: [
           {
             name: "BTC/USD",
@@ -202,7 +243,7 @@ let openRoundEventListener: SuiEvent;
     );
 
     openRoundEventListener = await onAggregatorOpenInterval(
-      new JsonRpcProvider(devnetConnection),
+      new JsonRpcProvider(testnetConnection),
       async (e) => {
         console.log(e);
         console.log(`JSON:`, JSON.stringify(e, null, 2));
@@ -263,7 +304,8 @@ let openRoundEventListener: SuiEvent;
     console.log("Load aggregator jobs data", await aggregator.loadJobs());
     setInterval(async () => {
       try {
-        await aggregator.openInterval(keypair, coin.details.reference.objectId);
+        const tx = new TransactionBlock();
+        await aggregator.openInterval(keypair, 10);
         console.log("opening round");
       } catch (e) {
         console.log("failed open round", e);
@@ -273,4 +315,13 @@ let openRoundEventListener: SuiEvent;
     console.log("errored out from the start", e);
   }
 })();
+
 const x = setInterval(() => {}, 30000);
+
+async function getCoinObject(
+  provider: JsonRpcProvider,
+  user: string
+): Promise<string> {
+  const coins = await provider.getAllCoins({ owner: user });
+  return coins.data.pop()?.coinObjectId;
+}
