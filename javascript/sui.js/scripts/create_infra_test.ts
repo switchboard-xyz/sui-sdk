@@ -76,7 +76,6 @@ let openRoundEventListener: SuiEvent;
     // if file extension ends with yaml
     try {
       const parsed = fs.readFileSync("./sui-secret.txt");
-      console.log(parsed);
       let str = fromB64(parsed.toString()).slice(1);
       keypair = Ed25519Keypair.fromSecretKey(str);
     } catch (_e) {
