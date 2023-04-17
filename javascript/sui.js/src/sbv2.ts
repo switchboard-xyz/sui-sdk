@@ -9,6 +9,8 @@ import {
   SuiObjectResponse,
   SuiTransactionBlockResponse,
   TransactionBlock,
+  MoveEventField,
+  SuiEventFilter,
 } from "@mysten/sui.js";
 import { OracleJob } from "@switchboard-xyz/common";
 import Big from "big.js";
@@ -311,7 +313,7 @@ export class SuiEvent {
     readonly pkg?: string,
     readonly moduleName?: string,
     readonly moveEvent?: string,
-    readonly eventType?: string
+    readonly moveEventField?: MoveEventField
   ) {}
 
   async onTrigger(
@@ -319,18 +321,20 @@ export class SuiEvent {
     errorHandler?: (error: unknown) => void
   ) {
     try {
-      const filters = [];
+      const filters: SuiEventFilter[] = [];
       if (this.pkg) {
-        filters.push({ Package: this.pkg });
-      }
-      if (this.moduleName) {
-        filters.push({ Module: this.moduleName });
-      }
-      if (this.eventType) {
-        filters.push({ EventType: this.eventType });
+        filters.push({
+          MoveModule: {
+            package: this.pkg,
+            module: this.moduleName,
+          },
+        });
       }
       if (this.moveEvent) {
         filters.push({ MoveEventType: this.moveEvent });
+      }
+      if (this.moveEventField) {
+        filters.push({ MoveEventField: this.moveEventField });
       }
 
       this.intervalId = await this.provider.subscribeEvent({
@@ -767,7 +771,6 @@ export class AggregatorAccount {
       provider,
       switchboardAddress,
       `aggregator_save_result_action`,
-      `MoveEvent`,
       `${switchboardAddress}::events::AggregatorUpdateEvent`
     );
     event.onTrigger(callback);
