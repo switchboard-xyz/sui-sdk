@@ -1,12 +1,13 @@
 [package]
 name = "switchboard"
-version = "0.0.5"
+version = "0.0.1"
 published-at = "0x3ad959d0446d971062f6b93bb88b9f3ffcb7abb5fa6515eb4b9c09b7280d0c7c"
 
 [dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet" }
-MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "testnet" }
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "main" }
+MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "main" }
 
 [addresses]
+switchboard =  "0x3ad959d0446d971062f6b93bb88b9f3ffcb7abb5fa6515eb4b9c09b7280d0c7c"
 std = "0x1"
 sui =  "0x2"
