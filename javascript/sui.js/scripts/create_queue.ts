@@ -7,6 +7,7 @@ import {
   JsonRpcProvider,
   fromB64,
   Connection,
+  MIST_PER_SUI,
 } from "@mysten/sui.js";
 import * as fs from "fs";
 import { SWITCHBOARD_ADDRESS, RPC } from "./common";
@@ -41,8 +42,8 @@ import { SWITCHBOARD_ADDRESS, RPC } from "./common";
       {
         name: "switchboard unpermissioned queue",
         authority: userAddress,
-        oracleTimeout: 300000,
-        reward: 0,
+        oracleTimeout: 60 * 45, // 45 minutes for oracles to timeout
+        reward: 5_000_000, //0.005 SUI reward matches up with gas costs + a bump
         unpermissionedFeedsEnabled: true,
         lockLeaseFunding: false,
         maxSize: 1000,

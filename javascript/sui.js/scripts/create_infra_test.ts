@@ -52,7 +52,6 @@ async function onAggregatorOpenInterval(
     provider,
     SWITCHBOARD_ADDRESS,
     `aggregator_open_interval_action`,
-    `MoveEvent`,
     `${SWITCHBOARD_ADDRESS}::events::AggregatorOpenIntervalEvent`
   );
   await event.onTrigger(callback, (e) => {
@@ -263,7 +262,6 @@ let openRoundEventListener: SuiEvent;
           const jobs: OracleJob[] = await agg.loadJobs();
 
           // simulate a fetch
-          // @ts-ignore
           const response = await fetch(`https://api.switchboard.xyz/api/test`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

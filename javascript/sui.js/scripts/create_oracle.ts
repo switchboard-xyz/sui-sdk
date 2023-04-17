@@ -37,7 +37,7 @@ import { SWITCHBOARD_ADDRESS, RPC } from "./common";
 
     const queue = new OracleQueueAccount(
       provider,
-      "0x738e508cf1eb3387c51ba9efe415adafe9e5eb5bad45fdad4a03ea0b51dafad3",
+      "0x1ed7c8f76d881bbffd17eee26102f5f8eb03cfdb9975e6667b1b52e6a61e2840",
       SWITCHBOARD_ADDRESS
     );
 

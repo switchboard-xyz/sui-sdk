@@ -47,7 +47,6 @@ async function onAggregatorOpenInterval(
     provider,
     SWITCHBOARD_ADDRESS,
     `aggregator_open_interval_action`,
-    `MoveEvent`,
     `${SWITCHBOARD_ADDRESS}::events::AggregatorOpenIntervalEvent`
   );
   await event.onTrigger(callback, (e) => {
@@ -82,13 +81,13 @@ let openRoundEventListener: SuiEvent;
 
     const queue = new OracleQueueAccount(
       provider,
-      "0x738e508cf1eb3387c51ba9efe415adafe9e5eb5bad45fdad4a03ea0b51dafad3",
+      "0x1ed7c8f76d881bbffd17eee26102f5f8eb03cfdb9975e6667b1b52e6a61e2840",
       SWITCHBOARD_ADDRESS
     );
 
     const oracle = new OracleAccount(
       provider,
-      "0x44ffa55891669c2b377d75a6f7932f2f70556cac5772870e988207a79352fa47",
+      "0x1869b5617d2c503851037a25c3ba7a0911a7a084853b9f9d8a7a145c4a03422c",
       SWITCHBOARD_ADDRESS
     );
 
