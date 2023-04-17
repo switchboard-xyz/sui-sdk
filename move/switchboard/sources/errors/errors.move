@@ -11,5 +11,15 @@ module switchboard::errors {
     public fun AggregatorInvalidMinOracleResults(): u64 { 9 }
     public fun AggregatorInvalidUpdateDelay(): u64 { 10 }
     public fun AggregatorIllegalRoundOpenCall(): u64 { 11 }
-    public fun AggregatorInvalidMinJobs(): u64 { 12}
+    public fun AggregatorInvalidMinJobs(): u64 { 12 }
+    public fun InvalidQuoteError(): u64 { 13 }
+    public fun QuoteExpiredError(): u64 { 14 } 
+    public fun InvalidNodeError(): u64 { 15 }
+    public fun QueueFullError(): u64 { 16 }
+    public fun InsufficientQueueError(): u64 { 17 }
+    public fun MrEnclaveAlreadyExists(): u64 { 18 }
+    public fun MrEnclaveDoesNotExist(): u64 { 19 }
+    public fun MrEnclaveAtCapacity(): u64 { 20 }
+    public fun InvalidConstraint(): u64 { 21 }
+    public fun InvalidTimestamp(): u64 { 22 }
 }

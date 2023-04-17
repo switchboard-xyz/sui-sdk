@@ -1,16 +1,38 @@
 module switchboard::aggregator {
-    use switchboard::math::{SwitchboardDecimal};
+    use switchboard::math::{Self, SwitchboardDecimal};
+    use switchboard::job::{Self, Job};
+    use switchboard::errors;
     use sui::object::{Self, UID};
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
     use sui::dynamic_object_field;
+    use sui::bag::{Self, Bag};
+    use sui::clock::{Self, Clock};
+    use std::vector;
+    
+    friend switchboard::create_feed_action;
+    friend switchboard::aggregator_init_action;
+    friend switchboard::aggregator_open_interval_action;
+    friend switchboard::aggregator_add_job_action;
+    friend switchboard::aggregator_remove_job_action;
+    friend switchboard::aggregator_set_configs_action;
+    friend switchboard::aggregator_save_result_action;
+    friend switchboard::aggregator_escrow_deposit_action;
+    friend switchboard::aggregator_escrow_withdraw_action;
+    friend switchboard::oracle_token_withdraw_action;
+    friend switchboard::aggregator_lock_action;
+    friend switchboard::aggregator_set_authority_action;
+    friend switchboard::aggregator_fast_save_result_action;
+    friend switchboard::crank_push_action;
 
+    // [SHARED]
     struct Aggregator has key {
         id: UID,
 
         // Aggregator Config Data
         authority: address, 
         queue_addr: address,
+        token_addr: address,
         batch_size: u64,
         min_oracle_results: u64,
         min_update_delay_seconds: u64,
@@ -27,13 +49,13 @@ module switchboard::aggregator {
         // Aggregator State
         next_allowed_update_time: u64,
 
-        // created at timestamp seconds
+        // Created-at timestamp (seconds)
         created_at: u64,
 
         // Aggregator Read Configs
         read_charge: u64,
         reward_escrow: address,
-        read_whitelist: vector<address>,
+        read_whitelist: Bag,
         limit_reads_to_whitelist: bool,
 
         // Aggregator Update Data
@@ -44,24 +66,52 @@ module switchboard::aggregator {
         curr_interval_payouts: u64,
         next_interval_refresh_time: u64,
 
+        // Leases
+        escrows: Bag,
+
         // DYNAMIC FIELDS -----
         // b"history": AggregatorHistoryData,
         // b"jobs_data": AggregatorJobData 
     }
 
-    struct SlidingWindowElement has store, drop {
-        oracle_key: address,
+    // [IMMUTABLE] Aggregator Config that's submitted for immutable updates
+    struct AggregatorToken has key {
+        id: UID,
+        aggregator_addr: address,
+        queue_addr: address,
+        batch_size: u64,
+        min_oracle_results: u64,
+        min_update_delay_seconds: u64,
+        created_at: u64,
+        read_charge: u64,
+        reward_escrow: address,
+        read_whitelist: Bag,
+        limit_reads_to_whitelist: bool,
+    }
+
+    // [IMMUTABLE] Results are immutable updates for each interval - the medianized result of AggregatorUpdates
+    struct Result has key {
+        id: UID,
+        aggregator_addr: address,
+        values: SlidingWindow,
+        timestamp: u64,
+        parent: address,
+    }
+
+    struct SlidingWindowElement has store, drop, copy {
+        oracle_addr: address,
         value: SwitchboardDecimal,
         timestamp: u64
     }
-
-    struct SlidingWindow has key, store {
-        id: UID,
+    
+    // [IMMUTABLE / SHARED] - shared within the Aggregator, immutable for the Result
+    struct SlidingWindow has copy, store {
         data: vector<SlidingWindowElement>,
         latest_result: SwitchboardDecimal,
         latest_timestamp: u64,
     }
 
+    // [SHARED]
     struct AggregatorHistoryData has key, store {
         id: UID,
         data: vector<AggregatorHistoryRow>,
@@ -73,6 +123,7 @@ module switchboard::aggregator {
         timestamp: u64,
     }
 
+    // [SHARED]
     struct AggregatorJobData has key, store {
         id: UID,
         job_keys: vector<address>,
@@ -80,6 +131,7 @@ module switchboard::aggregator {
         jobs_checksum: vector<u8>,
     }
 
+    // [OWNED]
     struct Authority has key, store {
         id: UID,
         aggregator_address: address,
@@ -88,15 +140,58 @@ module switchboard::aggregator {
     // --- Initialization
     fun init(_ctx: &mut TxContext) {}
 
-
+  
     public fun share_aggregator(aggregator: Aggregator) {
         transfer::share_object(aggregator);
     }
+    
+
+    public fun freeze_result(result: Result) {
+        transfer::freeze_object(result);
+    }
 
     public fun latest_value(aggregator: &Aggregator): (SwitchboardDecimal, u64) {
+        assert!(aggregator.read_charge == 0, errors::PermissionDenied());
         (
             aggregator.update_data.latest_result, 
             aggregator.update_data.latest_timestamp,
+        )
+    }
+
+    // get the latest result
+    // and latest timestamp
+    public fun result_data(
+        result: &Result, // [immutable] update result
+        aggregator: &AggregatorToken, // [immutable] aggregator config data
+        clock: &Clock, // [shared] clock
+        max_result_age_seconds: u64, // max result age
+        ctx: &TxContext 
+    ): (SwitchboardDecimal, u64) {
+        assert!(
+            aggregator.read_charge == 0 && aggregator.limit_reads_to_whitelist == false || 
+            bag::contains(&aggregator.read_whitelist, tx_context::sender(ctx)), 
+            errors::PermissionDenied()
+        );
+        assert!(
+            result.aggregator_addr == aggregator.aggregator_addr,
+            errors::InvalidArgument()
+        );
+        let length = vector::length(&result.values.data);
+        assert!(length < aggregator.batch_size, errors::InvalidArgument());
+
+        // make sure that every result is max age seconds old
+        let i = 0;
+        while (i < length) {
+            let time_diff = (clock::timestamp_ms(clock) / 1000) - vector::borrow(&result.values.data, i).timestamp;
+            assert!(
+                time_diff < max_result_age_seconds,
+                errors::InvalidArgument()
+            );
+            i = i + 1;
+        };
+        (
+            result.values.latest_result, 
+            result.values.latest_timestamp,
         )
     }
 
@@ -140,6 +235,14 @@ module switchboard::aggregator {
     public fun aggregator_address(aggregator: &Aggregator): address {
         object::uid_to_address(&aggregator.id)
     }
+
+    public fun aggregator_token_address(token: &AggregatorToken): address {
+        object::uid_to_address(&token.id)
+    }
+
+    public fun result_address(result: &Result): address {
+        object::uid_to_address(&result.id)
+    }
     
     public fun crank_disabled(aggregator: &Aggregator): bool {
         aggregator.crank_disabled
@@ -156,4 +259,34 @@ module switchboard::aggregator {
     public fun crank_row_count(aggregator: &Aggregator): u8 {
         aggregator.crank_row_count
     }
+
+    public fun created_at(aggregator: &Aggregator): u64 {
+        aggregator.created_at
+    }
+
+    public fun aggregator_token_data(aggregator_token: &AggregatorToken): (
+        address,
+        address,
+        u64,
+        u64,
+        u64,
+        u64,
+    ) {
+        (
+            aggregator_token.aggregator_addr,
+            aggregator_token.queue_addr,
+            aggregator_token.batch_size,
+            aggregator_token.min_oracle_results,
+            aggregator_token.min_update_delay_seconds,
+            aggregator_token.created_at,
+        )
+    }
+
+    public fun freeze_aggregator_token(
+        aggregator_token: AggregatorToken
+    ) {
+        transfer::freeze_object(aggregator_token);
+    }
+
+
 }

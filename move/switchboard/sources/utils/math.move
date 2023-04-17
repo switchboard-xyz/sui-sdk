@@ -341,6 +341,7 @@ module switchboard::math {
 
     #[test(account = @0x1)]
     public entry fun test_math() {
+
         let vec: vector<SwitchboardDecimal> = vector::empty();
         vector::push_back(&mut vec, new(20000012342, 0, false));
         vector::push_back(&mut vec, new(20000012341, 0, false));
