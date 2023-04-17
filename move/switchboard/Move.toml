@@ -8,6 +8,6 @@ Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-fram
 MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "main" }
 
 [addresses]
-switchboard =  "0x0"
+switchboard =  "0x3ad959d0446d971062f6b93bb88b9f3ffcb7abb5fa6515eb4b9c09b7280d0c7c"
 std = "0x1"
 sui =  "0x2"

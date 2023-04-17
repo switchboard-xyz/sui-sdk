@@ -23,7 +23,7 @@
 
 Build the example program
 
-- deployed at [https://explorer.sui.io/object/0x744f0744f0a5f26afcc89bda6ad5af5e9e58df751f830be8be33945b40dbb175](https://explorer.sui.io/object/0x744f0744f0a5f26afcc89bda6ad5af5e9e58df751f830be8be33945b40dbb175)
+- deployed at
 - try it with a sample input BTC/USD feed (Aggregator address: 0x39d373d9df51d15fc0ed75b0dff7ae7f62cd148fe96343a900939cc34201cdfe)
 
 ```bash
