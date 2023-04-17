@@ -1,6 +1,5 @@
 module switchboard::aggregator {
-    use switchboard::math::{Self, SwitchboardDecimal};
-    use switchboard::job::{Self, Job};
+    use switchboard::math::{SwitchboardDecimal};
     use switchboard::errors;
     use sui::object::{Self, UID};
     use sui::transfer;
@@ -9,21 +8,6 @@ module switchboard::aggregator {
     use sui::bag::{Self, Bag};
     use sui::clock::{Self, Clock};
     use std::vector;
-    
-    friend switchboard::create_feed_action;
-    friend switchboard::aggregator_init_action;
-    friend switchboard::aggregator_open_interval_action;
-    friend switchboard::aggregator_add_job_action;
-    friend switchboard::aggregator_remove_job_action;
-    friend switchboard::aggregator_set_configs_action;
-    friend switchboard::aggregator_save_result_action;
-    friend switchboard::aggregator_escrow_deposit_action;
-    friend switchboard::aggregator_escrow_withdraw_action;
-    friend switchboard::oracle_token_withdraw_action;
-    friend switchboard::aggregator_lock_action;
-    friend switchboard::aggregator_set_authority_action;
-    friend switchboard::aggregator_fast_save_result_action;
-    friend switchboard::crank_push_action;
 
     // [SHARED]
     struct Aggregator has key {
