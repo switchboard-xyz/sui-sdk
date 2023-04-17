@@ -23,7 +23,6 @@ module switchboard_feed_parser::switchboard_feed_parser {
         aggregator_addr: address,
         latest_result: u128,
         latest_result_scaling_factor: u8,
-        round_id: u128,
         latest_timestamp: u64,
     }
 
@@ -32,7 +31,7 @@ module switchboard_feed_parser::switchboard_feed_parser {
         feed: &Aggregator, 
         ctx: &mut TxContext
     ) {       
-        let (latest_result, latest_timestamp, round_id) = aggregator::latest_value(feed);
+        let (latest_result, latest_timestamp) = aggregator::latest_value(feed);
         
         // get latest value 
         let (value, scaling_factor, _neg) = math::unpack(latest_result); 
@@ -43,7 +42,6 @@ module switchboard_feed_parser::switchboard_feed_parser {
                 latest_result_scaling_factor: scaling_factor,
                 aggregator_addr: aggregator::aggregator_address(feed),
                 latest_timestamp,
-                round_id,
             }, 
             tx_context::sender(ctx)
         );
