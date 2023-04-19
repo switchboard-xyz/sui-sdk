@@ -72,17 +72,17 @@ module switchboard::math {
 
     public fun median(v: &mut vector<SwitchboardDecimal>): SwitchboardDecimal {
         let size = vector::length(v);
+        sort_results(v);
         if (size % 2 == 0) {
             let result = zero();
-            let lower_idx = little_floyd_rivest(v, size / 2, 0, size - 1);
-            let upper_idx = little_floyd_rivest(v, (size / 2) - 1, 0, size - 1);
-            let sum = add(&lower_idx, &upper_idx);
+            let lower_idx = vector::borrow(v, (size / 2) - 1);
+            let upper_idx = vector::borrow(v, size / 2);
+            let sum = add(lower_idx, upper_idx);
             div(&sum, &new(2, 0, false), &mut result);
             result
         } else {
-            little_floyd_rivest(v, size / 2, 0, size - 1)
+            *vector::borrow(v, size / 2)
         }
-        
     }
 
     // By reference 
@@ -239,63 +239,118 @@ module switchboard::math {
         }
     }
 
-    // floyd rivest https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm
-    // except only for input len < 600 
-    // find `k`th smallest element where left is start index, right is end index
-    public fun little_floyd_rivest(vec: &mut vector<SwitchboardDecimal>, k: u64, left: u64, right: u64): SwitchboardDecimal {
-        let size = vector::length<SwitchboardDecimal>(vec);
-        assert!(size < 600, EINPUT_TOO_LARGE);
-        while (right > left) {
-            let i = left;
-            let j = right;
-            let t = *vector::borrow(vec, k);
+    // add signed u64
+    public fun add_u64(i: u64, ineg: bool, j: u64, jneg: bool): (bool, u64) {
+        let (neg, val) = if (ineg && jneg) {
+            (true, i + j)
+        } else if (ineg) {
+            if (i > j) {
+                (true, i - j)
+            } else {
+                (false, j - i)
+            }
+        } else if (jneg) {
+            if (j > i) {
+                (true, j - i)
+            } else {
+                (false, i - j)
+            }
+        } else {
+            (false, i + j)
+        };
+        (neg, val)
+    }
 
-            // partition the elements between left and right around vec[k]
-            // swap vec[left] and vec[k]
-            vector::swap(vec, left, k);
+    // sub signed u64
+    public fun sub_u64(i: u64, ineg: bool, j: u64, jneg: bool): (bool, u64) {
+       return (add_u64(i, ineg, j, !jneg))
+    }
+
+    public fun lt_u64(i: u64, ineg: bool, j: u64, jneg: bool): bool {
+        if (ineg && jneg) {
+            return i > j
+        } else if (ineg) {
+            return true
+        } else if (jneg) {
+            return false
+        };
+        i < j
+    }
+
+    public fun sort_results(
+        vec: &mut vector<SwitchboardDecimal>,
+    ) {
+
+        // handle size 0 or 1 vecs
+        let n = vector::length(vec);
+        if (n < 2) {
+            return
+        };
+
+        // handle pre-sorted vecs
+        let sorted = true;
+        let i = 1;
+        while (i < n) {
+            if (gt(vector::borrow(vec, i - 1), vector::borrow(vec, i))) {
+                sorted = false;
+                break
+            };
+            i = i + 1;
+        };
+        if (sorted) {
+            return
+        };
+
+
+        // handle simple case
+        sorted = true;
+        let i = 0;
+        let middle = n / 2;
+        while (i < middle) {
+            if (gt(vector::borrow(vec, i), vector::borrow(vec, n - i - 1))) {
+                vector::swap(vec, i, n - i - 1);
+            } else {
+                sorted = false;
+                break
+            };
             
-            // if vec[right] > t
-            if (gt(vector::borrow(vec, right), &t)) {
-                vector::swap(vec, left, right);
-            };
+            i = i + 1;
+        };
+        if (sorted) {
+            return
+        };
 
-            while (i < j) {
-                // swap vec[i] and vec[j]
+        // handle quicksort
+        quick_sort(vec, 0, false, n - 1, false)
+    }
+
+    public fun quick_sort(vec: &mut vector<SwitchboardDecimal>, left: u64, left_neg: bool, right: u64, right_neg: bool) {
+        let (i, ineg) = (left, left_neg);
+        let (j, jneg) = (right, right_neg);
+
+        // get pivot
+        let (right_min_left_neg, right_min_left) = sub_u64(right, right_neg, left, left_neg);
+        let (_, pivot_index) = add_u64(left, left_neg, right_min_left / 2, right_min_left_neg);
+        let pivot = *vector::borrow<SwitchboardDecimal>(vec, pivot_index);
+        while (i <= j) {
+            while (lt(vector::borrow(vec, i), &pivot)) {
+                (ineg, i) = add_u64(i, ineg, 1, false)
+            };
+            while (gt(vector::borrow(vec, j), &pivot)) {
+                (jneg, j) = sub_u64(j, jneg, 1, false);
+            };
+            if (lt_u64(i, ineg, j, jneg) || (i == j && ineg == jneg)) {
                 vector::swap(vec, i, j);
-                i = i + 1;
-                j = j - 1;
-
-                while (lt(vector::borrow(vec, i), &t)) {
-                    i = i + 1;
-                };
-                while (gt(vector::borrow(vec, j), &t)) {
-                    j = j - 1;
-                };
-            };
-
-            if (equals(vector::borrow(vec, left), &t)) {
-                // swap vec[left] and vec[j]
-                vector::swap(vec, left, j);
-             } else {
-                j = j + 1; // swap vec[right] and vec[j]
-                vector::swap(vec, right, j);
-            };
-
-            // Adjust left and right towards the boundaries of the subset
-            // containing the (k - left + 1)th smallest element.
-            if (j <= k) {
-                left = j + 1;
-            };
-            if (k <= j) {
-                if (j != 0) {
-                    right = j - 1;
-                } else {
-                    right = j;
-                }
+                (ineg, i) = add_u64(i, ineg, 1, false);
+                (jneg, j) = sub_u64(j, jneg, 1, false);
             };
         };
-        
-        *vector::borrow(vec, k)
+        if (lt_u64(left, left_neg, j, jneg)) {
+            quick_sort(vec, left, left_neg, j, jneg);
+        };
+        if (lt_u64(i, ineg, right, right_neg)) {
+            quick_sort(vec, i, ineg, right, right_neg);
+        };
     }
 
     // Exponents.
@@ -339,6 +394,16 @@ module switchboard::math {
         }
     }
 
+    #[test_only]
+    fun enforce_order(vec: &vector<SwitchboardDecimal>) {
+        let n = vector::length(vec);
+        let i = 1;
+        while (i < n) {
+            assert!(lte(vector::borrow(vec, i - 1), vector::borrow(vec, i)), 0);
+            i = i + 1;
+        }
+    } 
+
     #[test(account = @0x1)]
     public entry fun test_math() {
 
@@ -361,5 +426,84 @@ module switchboard::math {
         vector::push_back(&mut vec, new(20000012342, 0, false));
         let median = median(&mut vec);
         std::debug::print(&median);
+
+
+        let vec: vector<SwitchboardDecimal> = vector::empty();
+        vector::push_back(&mut vec, new(1, 0, false));
+        vector::push_back(&mut vec, new(5, 0, false));
+        vector::push_back(&mut vec, new(2, 0, false));
+        vector::push_back(&mut vec, new(3, 0, false));
+        vector::push_back(&mut vec, new(6, 0, false));
+        vector::push_back(&mut vec, new(7, 0, false));
+        vector::push_back(&mut vec, new(5, 0, false));
+        vector::push_back(&mut vec, new(9, 0, false));
+        vector::push_back(&mut vec, new(2, 0, false));
+        vector::push_back(&mut vec, new(3, 0, false));
+        vector::push_back(&mut vec, new(1000, 0, false));
+        vector::push_back(&mut vec, new(23412, 0, false));
+        vector::push_back(&mut vec, new(512, 0, true));
+        vector::push_back(&mut vec, new(11, 0, false));
+        vector::push_back(&mut vec, new(222, 0, false));
+        vector::push_back(&mut vec, new(31245, 0, false));
+        sort_results(&mut vec);
+        std::debug::print(&vec);
+        enforce_order(&vec);
+
+        let vec: vector<SwitchboardDecimal> = vector::empty();
+        vector::push_back(&mut vec, new(1, 9, false));
+        vector::push_back(&mut vec, new(5, 9, false));
+        vector::push_back(&mut vec, new(2, 9, false));
+        vector::push_back(&mut vec, new(3, 9, true));
+        vector::push_back(&mut vec, new(6, 9, false));
+        vector::push_back(&mut vec, new(7, 9, false));
+        vector::push_back(&mut vec, new(5, 9, true));
+        vector::push_back(&mut vec, new(0, 9, false));
+        vector::push_back(&mut vec, new(2, 9, true));
+        vector::push_back(&mut vec, new(0, 9, true));
+        vector::push_back(&mut vec, new(1999, 9, false));
+        vector::push_back(&mut vec, new(23412, 9, false));
+        vector::push_back(&mut vec, new(512, 9, true));
+        vector::push_back(&mut vec, new(11, 9, false));
+        vector::push_back(&mut vec, new(222, 9, false));
+        vector::push_back(&mut vec, new(31245, 0, false));
+        sort_results(&mut vec);
+        std::debug::print(&vec);
+        enforce_order(&vec);
+
+
+        let vec: vector<SwitchboardDecimal> = vector::empty();
+        vector::push_back(&mut vec, new(1, 9, false));
+        sort_results(&mut vec);
+        std::debug::print(&vec);
+        enforce_order(&vec);
+
+
+        let vec: vector<SwitchboardDecimal> = vector::empty();
+        vector::push_back(&mut vec, new(1, 9, false));
+        vector::push_back(&mut vec, new(5, 9, true));
+        sort_results(&mut vec);
+        std::debug::print(&vec);
+        enforce_order(&vec);
+
+
+        let vec: vector<SwitchboardDecimal> = vector::empty();
+        vector::push_back(&mut vec, new(1, 9, false));
+        vector::push_back(&mut vec, new(5, 9, true));
+        vector::push_back(&mut vec, new(23412, 9, false));
+        sort_results(&mut vec);
+        std::debug::print(&vec);
+        enforce_order(&vec);
+
+
+        let vec: vector<SwitchboardDecimal> = vector::empty();
+        vector::push_back(&mut vec, new(10, 0, false));
+        vector::push_back(&mut vec, new(1, 0, false));
+        let expected_median = new(55, 1, false);
+        let median = median(&mut vec);
+        std::debug::print(&median);
+        assert!(median.value == expected_median.value, 0);
+
+        std::debug::print(&vec);
+        enforce_order(&vec);
     }
 }

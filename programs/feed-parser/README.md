@@ -23,12 +23,9 @@
 
 Build the example program
 
-- deployed at
-- try it with a sample input BTC/USD feed (Aggregator address: 0x39d373d9df51d15fc0ed75b0dff7ae7f62cd148fe96343a900939cc34201cdfe)
-
 ```bash
 sui move compile
 
 # skip dependency verification because we're only pulling in a binding (not the full source)
-sui client publish --gas-budget 100000000 --skip-dependency-verification
+sui client publish --gas-budget 100000000
 ```

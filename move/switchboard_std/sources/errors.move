@@ -22,4 +22,5 @@ module switchboard::errors {
     public fun MrEnclaveAtCapacity(): u64 { 20 }
     public fun InvalidConstraint(): u64 { 21 }
     public fun InvalidTimestamp(): u64 { 22 }
+    public fun InvalidPackage(): u64 { 23 }
 }
