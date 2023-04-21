@@ -417,8 +417,8 @@ module switchboard::aggregator {
     ): (bool, SwitchboardDecimal) {
         let batch_size = batch_size;
         let i = 0;
-        let oldest_timestamp = vector::borrow(&update_data.data, 0).timestamp;
         let oldest_idx = 0;
+        let oldest_timestamp = 0;
         while (i < vector::length(&update_data.data)) {
             let curr_update = vector::borrow(&update_data.data, i);
 
@@ -562,5 +562,89 @@ module switchboard::aggregator {
         };
 
         (confirmed, result)
+    }
+
+
+    #[test_only]
+    struct SecretKey has drop {}
+
+    #[test_only]
+    public fun create_aggregator_for_testing(ctx: &mut TxContext): Aggregator {
+        new(
+            b"test", // name: 
+            @0x0, // queue_addr: 
+            1, // batch_size: 
+            1, // min_oracle_results: 
+            1, // min_job_results: 
+            0, // min_update_delay_seconds: 
+            math::zero(), // variance_threshold: 
+            0, // force_report_period: 
+            false, // disable_crank: 
+            0, // history_limit: 
+            0, // read_charge: 
+            @0x0, // reward_escrow: 
+            vector::empty(), // read_whitelist: 
+            false, // limit_reads_to_whitelist: 
+            0, // created_at: 
+            tx_context::sender(ctx), // authority, - this is the owner of the aggregator
+            &SecretKey {}, // _friend_key: scopes the function to only by the package of aggregator creator (intenrnal)
+            ctx,
+        )
+    }
+
+    #[test_only]
+    public fun set_value_for_testing(
+        value: u128,        // example the number 10 would be 10 * 10^dec (dec automatically scaled to 9)
+        scale_factor: u8,   // example 9 would be 10^9, 10 = 1000000000
+        negative: bool,     // example -10 would be true
+        aggregator: &mut Aggregator, // aggregator
+        now: u64,           // timestamp (in seconds)
+        ctx: &mut TxContext
+    ) {
+
+        // set the value of a test aggregator
+        push_update(
+            aggregator, 
+            tx_context::sender(ctx), 
+            math::new(value, scale_factor, negative),
+            now,
+            &SecretKey {},
+        );
+    }
+
+    #[test(account = @0x1)]
+    public entry fun create_and_read_test_aggregator(): address {
+        use sui::test_scenario;
+
+        let admin = @0xA1;
+        let scenario_val = test_scenario::begin(admin);
+        let scenario = &mut scenario_val;
+        let aggregator = create_aggregator_for_testing(test_scenario::ctx(scenario));
+
+        // set the update timestamp to 1000 (seconds)
+        let now = 1000;
+
+        // set the value of the aggregator to 10
+        set_value_for_testing(10, 9, false, &mut aggregator, now, test_scenario::ctx(scenario));
+
+        // read the latest value
+        let (result, timestamp) = latest_value(&aggregator);
+        let (result, scale_factor, negative) = math::unpack(result);
+
+        // check that values are what was expected
+        assert!(result == 10, errors::InvalidArgument());
+        assert!(scale_factor == 9, errors::InvalidArgument());
+        assert!(negative == false, errors::InvalidArgument());
+
+        // check timestamp
+        assert!(timestamp == now, errors::InvalidArgument());
+
+        let aggregator_address = aggregator_address(&aggregator);
+
+        // get rid of aggregator
+        share_aggregator(aggregator);
+        test_scenario::end(scenario_val);
+
+        aggregator_address
     }
 }
