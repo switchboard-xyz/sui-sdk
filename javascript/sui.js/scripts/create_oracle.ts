@@ -9,7 +9,7 @@ import {
   Connection,
 } from "@mysten/sui.js";
 import * as fs from "fs";
-import { SWITCHBOARD_ADDRESS, RPC } from "./common";
+import { SWITCHBOARD_ADDRESS, RPC, TESTNET_QUEUE } from "./common";
 
 // run it all at once
 (async () => {
@@ -37,7 +37,7 @@ import { SWITCHBOARD_ADDRESS, RPC } from "./common";
 
     const queue = new OracleQueueAccount(
       provider,
-      "0x1ed7c8f76d881bbffd17eee26102f5f8eb03cfdb9975e6667b1b52e6a61e2840",
+      TESTNET_QUEUE,
       SWITCHBOARD_ADDRESS
     );
 

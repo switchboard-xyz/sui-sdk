@@ -24,7 +24,12 @@ import {
 } from "@mysten/sui.js";
 import { OracleJob } from "@switchboard-xyz/common";
 import * as fs from "fs";
-import { SWITCHBOARD_ADDRESS, RPC } from "./common";
+import {
+  SWITCHBOARD_ADDRESS,
+  RPC,
+  TESTNET_QUEUE,
+  TESTNET_ORACLE,
+} from "./common";
 
 const onAggregatorUpdate = (
   client: JsonRpcProvider,
@@ -146,29 +151,16 @@ let openRoundEventListener: SuiEvent;
 
     const queue = new OracleQueueAccount(
       provider,
-      "0x738e508cf1eb3387c51ba9efe415adafe9e5eb5bad45fdad4a03ea0b51dafad3",
+      TESTNET_QUEUE,
       SWITCHBOARD_ADDRESS
     );
 
-    // const [oracle, oracleTxHash] = await createOracle(
-    //   provider,
-    //   keypair,
-    //   {
-    //     name: "Switchboard OracleAccount",
-    //     authority: userAddress,
-    //     queue:
-    //       "0x738e508cf1eb3387c51ba9efe415adafe9e5eb5bad45fdad4a03ea0b51dafad3", //
-    //     loadCoin: coin,
-    //     loadAmount: 1, // 1 mist
-    //     coinType: "0x2::sui::SUI",
-    //   },
-    //   SWITCHBOARD_ADDRESS
-    // );
     const oracle = new OracleAccount(
       provider,
-      "0x44ffa55891669c2b377d75a6f7932f2f70556cac5772870e988207a79352fa47",
+      TESTNET_ORACLE,
       SWITCHBOARD_ADDRESS
     );
+
     console.log(await oracle.loadData());
     //console.log(`Oracle ${oracle.address} created. tx hash: ${oracleTxHash}`);
 

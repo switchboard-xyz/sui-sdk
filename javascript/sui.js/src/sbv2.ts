@@ -14,7 +14,7 @@ import {
 } from "@mysten/sui.js";
 import { OracleJob } from "@switchboard-xyz/common";
 import Big from "big.js";
-import BN from "bn.js";
+import { BN } from "bn.js";
 import { sha3_256 } from "js-sha3";
 
 export const NULL_ADDRESS =
