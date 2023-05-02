@@ -1,8 +1,8 @@
-module switchboard::aggregator {
-    use switchboard::math::{Self, SwitchboardDecimal};
-    use switchboard::job::{Self, Job};
-    use switchboard::errors;
-    use switchboard::utils;
+module switchboard_std::aggregator {
+    use switchboard_std::math::{Self, SwitchboardDecimal};
+    use switchboard_std::job::{Self, Job};
+    use switchboard_std::errors;
+    use switchboard_std::utils;
     use sui::object::{Self, UID};
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
@@ -627,7 +627,9 @@ module switchboard::aggregator {
         // set the value of the aggregator to 10
         set_value_for_testing(10, 9, false, &mut aggregator, now, test_scenario::ctx(scenario));
 
-        // read the latest value
+
+
+        // read the latest value 
         let (result, timestamp) = latest_value(&aggregator);
         let (result, scale_factor, negative) = math::unpack(result);
 
@@ -635,6 +637,12 @@ module switchboard::aggregator {
         assert!(result == 10, errors::InvalidArgument());
         assert!(scale_factor == 9, errors::InvalidArgument());
         assert!(negative == false, errors::InvalidArgument());
+
+        // add another value
+        set_value_for_testing(12, 9, false, &mut aggregator, now, test_scenario::ctx(scenario));
+        set_value_for_testing(12, 9, false, &mut aggregator, now, test_scenario::ctx(scenario));
+
+
 
         // check timestamp
         assert!(timestamp == now, errors::InvalidArgument());

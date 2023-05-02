@@ -1,4 +1,4 @@
-module switchboard::utils {
+module switchboard_std::utils {
     use sui::table_vec::{Self, TableVec};
     use sui::bag::{Self, Bag};
     use sui::coin::{Self, Coin};

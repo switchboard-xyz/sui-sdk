@@ -1,4 +1,4 @@
-module switchboard::math {
+module switchboard_std::math {
     use std::vector;
 
     const EINCORRECT_STD_DEV: u64 = 0;

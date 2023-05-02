@@ -1,6 +1,6 @@
-module switchboard::quote {
-    use switchboard::utils;
-    use switchboard::errors;
+module switchboard_std::quote {
+    use switchboard_std::utils;
+    use switchboard_std::errors;
     use sui::object::{Self, UID};
     use sui::transfer;
     use sui::tx_context::{TxContext};

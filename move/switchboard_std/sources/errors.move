@@ -1,4 +1,4 @@
-module switchboard::errors {
+module switchboard_std::errors {
     public fun Generic(): u64 { 0 }
     public fun InvalidAuthority(): u64 { 1 }
     public fun PermissionDenied(): u64 { 2 }

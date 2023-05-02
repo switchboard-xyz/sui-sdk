@@ -1,4 +1,4 @@
-module switchboard::job {
+module switchboard_std::job {
     use sui::object::{Self, UID};
     use sui::transfer;
     use sui::tx_context::{TxContext};
