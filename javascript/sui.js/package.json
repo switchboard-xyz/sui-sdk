@@ -30,12 +30,12 @@
   },
   "dependencies": {
     "@mysten/sui.js": "0.32.2",
-    "@switchboard-xyz/common": "^2.1.45",
+    "@switchboard-xyz/common": "^2.1.47",
     "big.js": "^6.2.1",
     "bn.js": "^5.2.1",
     "chalk": "^5.0.1",
     "js-sha3": "^0.8.0",
-    "node-fetch": "3.3.0"
+    "node-fetch": "3.3.1"
   },
   "devDependencies": {
     "@switchboard-xyz/eslint-config": "latest",
