@@ -45,9 +45,10 @@ pnpm install
 
 ## Program IDs
 
-| **Network** | **Program ID**                               |
-| ----------- | -------------------------------------------- |
-| devnet      | `0x69da62384b7134af63bedeee615db9c4ce183b8f` |
+| **Network** | **Program ID**                                                       |
+| ----------- | -------------------------------------------------------------------- |
+| mainnet     | `0xfd2e0f4383df3ec9106326dcd9a20510cdce72146754296deed15403fcd3df8b` |
+| testnet     | `0x271beaa1f36bf8812a778f0df5a7a9f67a757008512096862a128c42923671e2` |
 
 See [switchboard.xyz/explorer](https://switchboard.xyz/explorer) for a list of
 feeds deployed on Sui.
