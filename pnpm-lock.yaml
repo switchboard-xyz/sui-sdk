@@ -20,8 +20,8 @@ importers:
         specifier: 0.32.2
         version: 0.32.2
       '@switchboard-xyz/common':
-        specifier: ^2.1.45
-        version: 2.1.45
+        specifier: ^2.1.47
+        version: 2.1.47
       big.js:
         specifier: ^6.2.1
         version: 6.2.1
@@ -35,8 +35,8 @@ importers:
         specifier: ^0.8.0
         version: 0.8.0
       node-fetch:
-        specifier: 3.3.0
-        version: 3.3.0
+        specifier: 3.3.1
+        version: 3.3.1
     devDependencies:
       '@switchboard-xyz/eslint-config':
         specifier: latest
@@ -548,8 +548,8 @@ packages:
     resolution: {integrity: sha512-bprE8+K5V+DPX7q2e2K57ImqNBdfGHDIWaGI5xHxZoxbKOuQZn4wzPiUxOAHnsUr3w3xHrWXwN7gnG/iIuEMIg==}
     dev: false
 
-  /@switchboard-xyz/common@2.1.45:
-    resolution: {integrity: sha512-hsxZR/0MwXxJSQWSYK06/nbwABXDPHyFHEb+3+MGAl161wSzB/RDNbF0uDil9b+I7UTZggLsB+/FOBzZyG8TAg==}
+  /@switchboard-xyz/common@2.1.47:
+    resolution: {integrity: sha512-kWOQlNTwjjZr2WKT7Xrg1pMPYRaSnIdZv19O2sl5CabpTnq1ikM6it8jzvHy5hVhVFh0tKFuoWAowcBFhvJ06A==}
     engines: {node: '>=12'}
     dependencies:
       '@solana/web3.js': 1.73.2
@@ -3153,8 +3153,8 @@ packages:
       whatwg-url: 5.0.0
     dev: false
 
-  /node-fetch@3.3.0:
-    resolution: {integrity: sha512-BKwRP/O0UvoMKp7GNdwPlObhYGB5DQqwhEDQlNKuoqwVYSxkSZCSbHjnFFmUEtwSKRPU4kNK8PbDYYitwaE3QA==}
+  /node-fetch@3.3.1:
+    resolution: {integrity: sha512-cRVc/kyto/7E5shrWca1Wsea4y6tL9iYJE5FBCius3JQfb/4P4I295PfhgbJQBLTx6lATE4z+wK0rPM4VS2uow==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
     dependencies:
       data-uri-to-buffer: 4.0.1

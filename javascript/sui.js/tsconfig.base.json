@@ -1,17 +1,7 @@
 {
-  "include": [
-    "./src/**/*"
-  ],
-  "exclude": [
-    "./sbv2-sui.ts",
-    "tests/**/*",
-    "lib",
-    "node_modules",
-    "scripts"
-  ],
-  "files": [
-    "src/index.ts"
-  ],
+  "include": ["./src/**/*"],
+  "exclude": ["./sbv2-sui.ts", "tests/**/*", "lib", "node_modules", "scripts"],
+  "files": ["src/index.ts"],
   "ts-node": {
     // these options are overrides used only by ts-node
     "compilerOptions": {
@@ -30,10 +20,7 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "types": [
-      "node",
-      "mocha"
-    ],
+    "types": ["node", "mocha"],
     "allowJs": true,
     "checkJs": false,
     // strict
