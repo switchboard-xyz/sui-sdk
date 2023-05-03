@@ -431,26 +431,25 @@ export class AggregatorAccount {
       arguments: [
         tx.pure(params.name),
         tx.object(params.queueAddress),
-        tx.pure(params.batchSize, "u64"),
-        tx.pure(params.minOracleResults, "u64"),
-        tx.pure(params.minJobResults, "u64"),
-        tx.pure(params.minUpdateDelaySeconds, "u64"),
-        tx.pure(vtMantissa, "u128"),
-        tx.pure(vtScale, "u8"),
-        tx.pure(params.forceReportPeriod ?? 0, "u64"),
-        tx.pure(params.disableCrank ?? false, "bool"),
-        tx.pure(params.historySize ?? 0, "u64"),
-        tx.pure(params.readCharge ?? 0, "u64"),
+        tx.pure(params.batchSize),
+        tx.pure(params.minOracleResults),
+        tx.pure(params.minJobResults),
+        tx.pure(params.minUpdateDelaySeconds),
+        tx.pure(vtMantissa),
+        tx.pure(vtScale),
+        tx.pure(params.forceReportPeriod ?? 0),
+        tx.pure(params.disableCrank ?? false),
+        tx.pure(params.historySize ?? 0),
+        tx.pure(params.readCharge ?? 0),
         tx.pure(
           params.rewardEscrow
             ? params.rewardEscrow
-            : signer.getPublicKey().toSuiAddress(),
-          "address"
+            : signer.getPublicKey().toSuiAddress()
         ),
-        tx.pure(params.readWhitelist ?? [], "vector<address>"),
-        tx.pure(params.limitReadsToWhitelist ?? false, "bool"),
+        tx.pure(params.readWhitelist ?? []),
+        tx.pure(params.limitReadsToWhitelist ?? false),
         tx.object(SUI_CLOCK_OBJECT_ID),
-        tx.pure(params.authority, "address"),
+        tx.pure(params.authority),
       ],
       typeArguments: [params.coinType ?? "0x2::sui::SUI"],
     });
@@ -495,7 +494,7 @@ export class AggregatorAccount {
       arguments: [
         tx.object(this.address),
         tx.object(params.job),
-        tx.pure(params.weight || 1, "u8"),
+        tx.pure(params.weight || 1),
       ],
     });
     return sendSuiTx(signerWithProvider, tx);
@@ -512,7 +511,7 @@ export class AggregatorAccount {
         tx.object(this.address),
         tx.pure(params.name),
         tx.pure(params.data),
-        tx.pure(params.weight || 1, "u8"),
+        tx.pure(params.weight || 1),
         tx.object(SUI_CLOCK_OBJECT_ID),
       ],
     });
@@ -526,7 +525,7 @@ export class AggregatorAccount {
     const tx = txb ?? new TransactionBlock();
     tx.moveCall({
       target: `${this.switchboardAddress}::aggregator_remove_job_action::run`,
-      arguments: [tx.object(this.address), tx.pure(params.job, "address")],
+      arguments: [tx.object(this.address), tx.pure(params.job)],
     });
     return tx;
   }
@@ -548,10 +547,10 @@ export class AggregatorAccount {
         params.lastResult && tx.object(params.lastResult),
         tx.object(params.oracleToken),
         tx.object(params.aggregatorToken),
-        tx.pure(mantissa, "u128"),
-        tx.pure(scale, "u8"),
-        tx.pure(neg, "bool"),
-        tx.pure(Math.floor(Date.now() / 1000), "u64"),
+        tx.pure(mantissa),
+        tx.pure(scale),
+        tx.pure(neg),
+        tx.pure(Math.floor(Date.now() / 1000)),
       ].filter((a) => Boolean(a)),
     });
     const signerWithProvider = new RawSigner(signer, this.provider);
@@ -583,12 +582,12 @@ export class AggregatorAccount {
       target: `${this.switchboardAddress}::aggregator_save_result_action::${fn}`,
       arguments: [
         tx.object(params.oracleAddress),
-        tx.pure(params.oracleIdx, "u64"),
+        tx.pure(params.oracleIdx),
         tx.object(this.address),
         tx.object(params.queueAddress),
-        tx.pure(valueMantissa, "u128"),
-        tx.pure(valueScale, "u8"),
-        tx.pure(valueNeg, "bool"),
+        tx.pure(valueMantissa),
+        tx.pure(valueScale),
+        tx.pure(valueNeg),
         params.quoteAddress && tx.object(params.quoteAddress),
         tx.object(SUI_CLOCK_OBJECT_ID), // TODO Replace with Clock
       ].filter((a) => Boolean(a)),
@@ -651,34 +650,23 @@ export class AggregatorAccount {
         tx.object(this.address),
         tx.pure(params.name ?? aggregator.name),
         tx.object(params.queueAddress ?? aggregator.queue_addr),
-        tx.pure(params.batchSize ?? aggregator.batch_size, "u64"),
+        tx.pure(params.batchSize ?? aggregator.batch_size),
+        tx.pure(params.minOracleResults ?? aggregator.min_oracle_results),
+        tx.pure(params.minJobResults ?? aggregator.min_job_results),
         tx.pure(
-          params.minOracleResults ?? aggregator.min_oracle_results,
-          "u64"
+          params.minUpdateDelaySeconds ?? aggregator.min_update_delay_seconds
         ),
-        tx.pure(params.minJobResults ?? aggregator.min_job_results, "u64"),
+        tx.pure(vtMantissa),
+        tx.pure(vtScale),
+        tx.pure(params.forceReportPeriod ?? aggregator.force_report_period),
+        tx.pure(params.disableCrank ?? aggregator.disable_crank),
+        tx.pure(params.historySize ?? aggregator.history_size),
+        tx.pure(params.readCharge ?? aggregator.read_charge),
+        tx.pure(params.rewardEscrow ?? aggregator.reward_escrow),
+        tx.pure(params.readWhitelist ?? aggregator.read_whitelist),
+        tx.pure(params.rmFromReadWhitelist ?? []),
         tx.pure(
-          params.minUpdateDelaySeconds ?? aggregator.min_update_delay_seconds,
-          "u64"
-        ),
-        tx.pure(vtMantissa, "u128"),
-        tx.pure(vtScale, "u8"),
-        tx.pure(
-          params.forceReportPeriod ?? aggregator.force_report_period,
-          "u64"
-        ),
-        tx.pure(params.disableCrank ?? aggregator.disable_crank, "bool"),
-        tx.pure(params.historySize ?? aggregator.history_size, "u64"),
-        tx.pure(params.readCharge ?? aggregator.read_charge, "u64"),
-        tx.pure(params.rewardEscrow ?? aggregator.reward_escrow, "address"),
-        tx.pure(
-          params.readWhitelist ?? aggregator.read_whitelist,
-          "vector<address>"
-        ),
-        tx.pure(params.rmFromReadWhitelist ?? [], "vector<address>"),
-        tx.pure(
-          params.limitReadsToWhitelist ?? aggregator.limit_reads_to_whitelist,
-          "bool"
+          params.limitReadsToWhitelist ?? aggregator.limit_reads_to_whitelist
         ),
       ],
       typeArguments: [this.coinType ?? "0x2::sui::SUI"],
@@ -701,35 +689,24 @@ export class AggregatorAccount {
       arguments: [
         tx.object(this.address),
         tx.pure(params.name ?? aggregator.name),
-        tx.pure(params.queueAddress ?? aggregator.queue_addr, "address"),
-        tx.pure(params.batchSize ?? aggregator.batch_size, "u64"),
+        tx.pure(params.queueAddress ?? aggregator.queue_addr),
+        tx.pure(params.batchSize ?? aggregator.batch_size),
+        tx.pure(params.minOracleResults ?? aggregator.min_oracle_results),
+        tx.pure(params.minJobResults ?? aggregator.min_job_results),
         tx.pure(
-          params.minOracleResults ?? aggregator.min_oracle_results,
-          "u64"
+          params.minUpdateDelaySeconds ?? aggregator.min_update_delay_seconds
         ),
-        tx.pure(params.minJobResults ?? aggregator.min_job_results, "u64"),
+        tx.pure(vtMantissa),
+        tx.pure(vtScale),
+        tx.pure(params.forceReportPeriod ?? aggregator.force_report_period),
+        tx.pure(params.disableCrank ?? aggregator.disable_crank),
+        tx.pure(params.historySize ?? aggregator.history_size),
+        tx.pure(params.readCharge ?? aggregator.read_charge),
+        tx.pure(params.rewardEscrow ?? aggregator.reward_escrow),
+        tx.pure(params.readWhitelist ?? aggregator.read_whitelist),
+        tx.pure(params.rmFromReadWhitelist ?? []),
         tx.pure(
-          params.minUpdateDelaySeconds ?? aggregator.min_update_delay_seconds,
-          "u64"
-        ),
-        tx.pure(vtMantissa, "u128"),
-        tx.pure(vtScale, "u8"),
-        tx.pure(
-          params.forceReportPeriod ?? aggregator.force_report_period,
-          "u64"
-        ),
-        tx.pure(params.disableCrank ?? aggregator.disable_crank, "bool"),
-        tx.pure(params.historySize ?? aggregator.history_size, "u64"),
-        tx.pure(params.readCharge ?? aggregator.read_charge, "u64"),
-        tx.pure(params.rewardEscrow ?? aggregator.reward_escrow, "address"),
-        tx.pure(
-          params.readWhitelist ?? aggregator.read_whitelist,
-          "vector<address>"
-        ),
-        tx.pure(params.rmFromReadWhitelist ?? [], "vector<address>"),
-        tx.pure(
-          params.limitReadsToWhitelist ?? aggregator.limit_reads_to_whitelist,
-          "bool"
+          params.limitReadsToWhitelist ?? aggregator.limit_reads_to_whitelist
         ),
       ],
       typeArguments: [this.coinType ?? "0x2::sui::SUI"],
@@ -756,7 +733,7 @@ export class AggregatorAccount {
       arguments: [
         tx.object(this.address),
         tx.object(authorityInfo.authorityObjectId),
-        tx.pure(authority, "address"),
+        tx.pure(authority),
       ],
     });
     return tx;
@@ -1037,7 +1014,7 @@ export class OracleAccount {
       target: `${switchboardAddress}::oracle_init_action::run`,
       arguments: [
         tx.pure(params.name),
-        tx.pure(params.authority, "address"),
+        tx.pure(params.authority),
         tx.object(params.queue),
         tx.object(SUI_CLOCK_OBJECT_ID),
       ],
@@ -1141,7 +1118,7 @@ export class OracleAccount {
       arguments: [
         tx.object(queueAddress),
         tx.object(this.address),
-        tx.pure(params.amount, "u64"),
+        tx.pure(params.amount),
       ],
       typeArguments: [this.coinType],
     });
@@ -1157,10 +1134,7 @@ export class OracleAccount {
       target: `${this.switchboardAddress}::quote_init_action::run_simple`,
       arguments: [
         tx.object(params.verifierQueueAddress),
-        tx.pure(
-          params.authority ?? signer.getPublicKey().toSuiAddress(),
-          "address"
-        ),
+        tx.pure(params.authority ?? signer.getPublicKey().toSuiAddress()),
         tx.pure(params.data),
         params.loadCoin ? tx.object(params.loadCoin) : params.loadCoinObj,
       ],
@@ -1186,10 +1160,7 @@ export class OracleAccount {
       target: `${this.switchboardAddress}::quote_update_action::run_simple`,
       arguments: [
         tx.object(params.verifierQueueAddress),
-        tx.pure(
-          params.authority ?? signer.getPublicKey().toSuiAddress(),
-          "address"
-        ),
+        tx.pure(params.authority ?? signer.getPublicKey().toSuiAddress()),
         tx.object(params.quoteAddress),
         tx.pure(params.data),
         params.loadCoin ? tx.object(params.loadCoin) : params.loadCoinObj,
@@ -1273,15 +1244,15 @@ export class OracleQueueAccount {
       target: `${this.switchboardAddress}::oracle_queue_set_configs_action::run`,
       arguments: [
         tx.object(this.address),
-        tx.pure(params.authority, "address"),
+        tx.pure(params.authority),
         tx.pure(params.name),
-        tx.pure(params.oracleTimeout, "u64"),
-        tx.pure(params.reward, "u128"),
-        tx.pure(params.unpermissionedFeedsEnabled, "bool"),
-        tx.pure(params.lockLeaseFunding, "bool"),
-        tx.pure(params.maxSize, "u64"),
-        tx.pure(params.verificationQueueAddress, "address"),
-        tx.pure(params.allowServiceQueueHeartbeats, "bool"),
+        tx.pure(params.oracleTimeout),
+        tx.pure(params.reward),
+        tx.pure(params.unpermissionedFeedsEnabled),
+        tx.pure(params.lockLeaseFunding),
+        tx.pure(params.maxSize),
+        tx.pure(params.verificationQueueAddress),
+        tx.pure(params.allowServiceQueueHeartbeats),
       ],
       typeArguments: [params.coinType ?? "0x2::sui::SUI"],
     });
@@ -1362,9 +1333,9 @@ export class Permission {
     tx.moveCall({
       target: `${switchboardAddress}::permission_init_action::run`,
       arguments: [
-        tx.pure(params.authority, "address"),
-        tx.pure(params.granter, "address"),
-        tx.pure(params.grantee, "address"),
+        tx.pure(params.authority),
+        tx.pure(params.granter),
+        tx.pure(params.grantee),
       ],
       typeArguments: [coinType],
     });
@@ -1404,11 +1375,11 @@ export class Permission {
       target: `${switchboardAddress}::permission_set_action::run`,
       arguments: [
         tx.object(params.queueId),
-        tx.pure(params.authority, "address"),
-        tx.pure(params.granter, "address"),
-        tx.pure(params.grantee, "address"),
-        tx.pure(params.permission, "u64"),
-        tx.pure(params.enable, "bool"),
+        tx.pure(params.authority),
+        tx.pure(params.granter),
+        tx.pure(params.grantee),
+        tx.pure(params.permission),
+        tx.pure(params.enable),
         tx.object(SUI_CLOCK_OBJECT_ID),
       ],
       typeArguments: [params.coinType ?? "0x2::sui::SUI"],
