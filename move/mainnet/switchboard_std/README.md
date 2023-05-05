@@ -5,7 +5,7 @@
 
   <h1>switchboard-move</h1>
 
-  <p>A Move module to interact with Switchboard V2 on Sui Testnet.</p>
+  <p>A Move module to interact with Switchboard V2 on Sui Mainnet.</p>
 
   <p>
     <a href="https://discord.gg/switchboardxyz">
@@ -37,15 +37,15 @@ name = "Package"
 version = "0.0.1"
 
 [dependencies]
-MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/deps/move-stdlib", rev = "testnet" }
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework", rev = "testnet" }
+MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/deps/move-stdlib", rev = "mainnet" }
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework", rev = "mainnet" }
 SwitchboardStdLib = { git = "https://github.com/switchboard-xyz/sbv2-sui.git", subdir = "move/switchboard/", rev = "main"  }
 
 [addresses]
 package = "0x0"
 std = "0x1"
 sui =  "0x2"
-switchboard =  "0x524c15a935d4c34474cdf2604ee42a6c47591d13c6ffb6b678f6b7eaffba12fe"
+switchboard =  "0x08d79f4d920b03d88faca1e421af023a87fbb1e4a6fd200248e6e9998d09e470"
 ```
 
 ## Usage
