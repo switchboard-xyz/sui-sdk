@@ -50,22 +50,24 @@ pnpm install
 | mainnet     | `0xfd2e0f4383df3ec9106326dcd9a20510cdce72146754296deed15403fcd3df8b` |
 | testnet     | `0x271beaa1f36bf8812a778f0df5a7a9f67a757008512096862a128c42923671e2` |
 
-See [switchboard.xyz/explorer](https://switchboard.xyz/explorer) for a list of
+See [switchboard.xyz/explorer](https://staging.app.switchboard.xyz/sui/mainnet) for a list of
 feeds deployed on Sui.
 
-See [app.switchboard.xyz](https://app.switchboard.xyz) to create your own Sui
+See [app.switchboard.xyz](https://staging.app.switchboard.xyz/build/feed) to create your own Sui
 feeds.
 
 ## Libraries
 
-| **Lang** | **Name**                                                                                                                                                                                    | **Description**                                            |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Move     | [switchboard](/move/switchboard/)                                                                                                                                                           | Move module to deserialize and read Switchboard data feeds |
-| JS       | [@switchboard-xyz/sui.js](/javascript/sui.js/) <br />[[npmjs](https://www.npmjs.com/package/@switchboard-xyz/sui.js), [Typedocs](https://docs.switchboard.xyz/api/@switchboard-xyz/sui.js)] | Typescript package to interact with Switchboard V2         |
+| **Lang**       | **Name**                                                                                                                                                                                    | **Description**                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Move [Mainnet] | [switchboard](/move/mainnet/switchboard_std/)                                                                                                                                               | Move module to deserialize and read Switchboard data feeds on sui mainnet |
+| Move [Testnet] | [switchboard](/move/testnet/switchboard_std/)                                                                                                                                               | Move module to deserialize and read Switchboard data feeds on sui testnet |
+| JS             | [@switchboard-xyz/sui.js](/javascript/sui.js/) <br />[[npmjs](https://www.npmjs.com/package/@switchboard-xyz/sui.js), [Typedocs](https://docs.switchboard.xyz/api/@switchboard-xyz/sui.js)] | Typescript package to interact with Switchboard V2                        |
 
 ## Example Programs
 
-- [feed-parser](/programs/feed-parser/): Read a Switchboard feed on Sui
+- [feed-parser-mainnet](/programs/mainnet/feed-parser/): Read a Switchboard feed on Sui Mainnet
+- [feed-parser-testnet](/programs/testnet/feed-parser/): Read a Switchboard feed on Sui Testnet
 
 ## Troubleshooting
 
