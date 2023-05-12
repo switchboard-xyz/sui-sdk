@@ -48,7 +48,7 @@ pnpm install
 | **Network** | **Program ID**                                                       |
 | ----------- | -------------------------------------------------------------------- |
 | mainnet     | `0xfd2e0f4383df3ec9106326dcd9a20510cdce72146754296deed15403fcd3df8b` |
-| testnet     | `0x271beaa1f36bf8812a778f0df5a7a9f67a757008512096862a128c42923671e2` |
+| testnet     | `0x4247e72df58552701456293027e75237fe85a214cd050b6e0358dc5047a3fb17` |
 
 See [switchboard.xyz/explorer](https://staging.app.switchboard.xyz/sui/mainnet) for a list of
 feeds deployed on Sui.
