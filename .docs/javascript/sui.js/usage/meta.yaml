@@ -1,0 +1,7 @@
+snippets:
+  - name: "Reading Feeds"
+    description: ""
+    filename: "read-a-feed.ts"
+  - name: "Creating Feeds"
+    description: ""
+    filename: "create-a-feed.ts"

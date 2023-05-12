@@ -1,0 +1,6 @@
+snippets:
+  - name: "Reading Feeds"
+    description:
+      pre: |
+        Read an aggregator result on-chain
+    filename: "read-feed.move"
