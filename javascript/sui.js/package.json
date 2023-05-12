@@ -1,7 +1,7 @@
 {
   "name": "@switchboard-xyz/sui.js",
   "description": "API wrapper for intergating with the Switchboardv2 program on sui",
-  "version": "2.3.12",
+  "version": "2.3.13",
   "license": "MIT",
   "files": [
     "lib",
@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@mysten/sui.js": "0.32.2",
-    "@switchboard-xyz/common": "^2.1.47",
+    "@switchboard-xyz/common": "^2.2.0",
     "big.js": "^6.2.1",
     "bn.js": "^5.2.1",
     "chalk": "^5.0.1",

@@ -20,8 +20,8 @@ importers:
         specifier: 0.32.2
         version: 0.32.2
       '@switchboard-xyz/common':
-        specifier: ^2.1.47
-        version: 2.1.47
+        specifier: ^2.2.0
+        version: 2.2.0
       big.js:
         specifier: ^6.2.1
         version: 6.2.1
@@ -548,8 +548,8 @@ packages:
     resolution: {integrity: sha512-bprE8+K5V+DPX7q2e2K57ImqNBdfGHDIWaGI5xHxZoxbKOuQZn4wzPiUxOAHnsUr3w3xHrWXwN7gnG/iIuEMIg==}
     dev: false
 
-  /@switchboard-xyz/common@2.1.47:
-    resolution: {integrity: sha512-kWOQlNTwjjZr2WKT7Xrg1pMPYRaSnIdZv19O2sl5CabpTnq1ikM6it8jzvHy5hVhVFh0tKFuoWAowcBFhvJ06A==}
+  /@switchboard-xyz/common@2.2.0:
+    resolution: {integrity: sha512-ciy3mSPh02e2Zk/54C8AJp7S35Z1rpyy3vyieVBB/k6bKyg0GG4snGgTGjiOAAsk/EQvxORy6S2TIwjbDa4r0g==}
     engines: {node: '>=12'}
     dependencies:
       '@solana/web3.js': 1.73.2
@@ -558,7 +558,7 @@ packages:
       big.js: 6.2.1
       bn.js: 5.2.1
       decimal.js: 10.4.3
-      protobufjs: 7.2.2
+      protobufjs: 7.2.3
       yaml: 2.2.1
     transitivePeerDependencies:
       - bufferutil
@@ -683,7 +683,7 @@ packages:
         optional: true
     dependencies:
       '@typescript-eslint/experimental-utils': 4.33.0(eslint@7.32.0)(typescript@4.9.5)
-      '@typescript-eslint/parser': 4.33.0(eslint@8.35.0)(typescript@4.9.5)
+      '@typescript-eslint/parser': 4.33.0(eslint@7.32.0)(typescript@4.9.5)
       '@typescript-eslint/scope-manager': 4.33.0
       debug: 4.3.4(supports-color@8.1.1)
       eslint: 7.32.0
@@ -743,7 +743,7 @@ packages:
       - typescript
     dev: true
 
-  /@typescript-eslint/parser@4.33.0(eslint@8.35.0)(typescript@4.9.5):
+  /@typescript-eslint/parser@4.33.0(eslint@7.32.0)(typescript@4.9.5):
     resolution: {integrity: sha512-ZohdsbXadjGBSK0/r+d87X0SBmKzOq4/S5nzK6SBgJspFo9/CUDJ7hjayuze+JK7CZQLDMroqytp7pOcFKTxZA==}
     engines: {node: ^10.12.0 || >=12.0.0}
     peerDependencies:
@@ -757,7 +757,7 @@ packages:
       '@typescript-eslint/types': 4.33.0
       '@typescript-eslint/typescript-estree': 4.33.0(typescript@4.9.5)
       debug: 4.3.4(supports-color@8.1.1)
-      eslint: 8.35.0
+      eslint: 7.32.0
       typescript: 4.9.5
     transitivePeerDependencies:
       - supports-color
@@ -2380,7 +2380,7 @@ packages:
       typescript: '>=3'
     dependencies:
       '@typescript-eslint/eslint-plugin': 4.33.0(@typescript-eslint/parser@4.33.0)(eslint@7.32.0)(typescript@4.9.5)
-      '@typescript-eslint/parser': 4.33.0(eslint@8.35.0)(typescript@4.9.5)
+      '@typescript-eslint/parser': 4.33.0(eslint@7.32.0)(typescript@4.9.5)
       chalk: 4.1.2
       eslint: 7.32.0
       eslint-config-prettier: 7.2.0(eslint@7.32.0)
@@ -3358,8 +3358,8 @@ packages:
     engines: {node: '>=0.4.0'}
     dev: true
 
-  /protobufjs@7.2.2:
-    resolution: {integrity: sha512-++PrQIjrom+bFDPpfmqXfAGSQs40116JRrqqyf53dymUMvvb5d/LMRyicRoF1AUKoXVS1/IgJXlEgcpr4gTF3Q==}
+  /protobufjs@7.2.3:
+    resolution: {integrity: sha512-TtpvOqwB5Gdz/PQmOjgsrGH1nHjAQVCN7JG4A6r1sXRWESL5rNMAiRcBQlCAdKxZcAbstExQePYG8xof/JVRgg==}
     engines: {node: '>=12.0.0'}
     requiresBuild: true
     dependencies:
