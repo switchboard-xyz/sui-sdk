@@ -1,4 +1,5 @@
 module switchboard_std::aggregator {
+    use switchboard_std::switchboard::{Self, AdminCap};
     use switchboard_std::math::{Self, SwitchboardDecimal};
     use switchboard_std::job::{Self, Job};
     use switchboard_std::errors;
@@ -60,6 +61,9 @@ module switchboard_std::aggregator {
 
         // Friend key to emulate (friend) behavior - users must pass in a type only accessible to friends in a package
         friend_key: vector<u8>,
+
+        // version of the contract
+        version: u64,
 
         // DYNAMIC FIELDS -----
         // b"history": AggregatorHistoryData,
@@ -183,6 +187,7 @@ module switchboard_std::aggregator {
             escrows: bag::new(ctx),
             token_addr: @0x0,
             friend_key,
+            version: switchboard::version(),
         }
     }
 
@@ -264,16 +269,19 @@ module switchboard_std::aggregator {
 
     public fun set_authority(aggregator: &mut Aggregator, authority: address, ctx: &mut TxContext) {
         assert!(has_authority(aggregator, ctx), errors::InvalidAuthority());
+        assert!(aggregator.version == switchboard::version(), errors::InvalidVersion());
         aggregator.authority = authority;
     }
 
     public fun set_aggregator_token(aggregator: &mut Aggregator, token_addr: address, ctx: &mut TxContext) {
         assert!(has_authority(aggregator, ctx), errors::InvalidAuthority());
+        assert!(aggregator.version == switchboard::version(), errors::InvalidVersion());
         aggregator.token_addr = token_addr;
     }
 
     public fun add_job(aggregator: &mut Aggregator, job: &Job, weight: u8, ctx: &mut TxContext) {
         assert!(has_authority(aggregator, ctx), errors::InvalidAuthority());
+        assert!(aggregator.version == switchboard::version(), errors::InvalidVersion());
         let job_data = dynamic_object_field::borrow_mut<vector<u8>, AggregatorJobData>(&mut aggregator.id, b"job_data");
         let has_job = dynamic_field::exists_with_type<address, vector<u8>>(
             &job_data.id,
@@ -298,6 +306,7 @@ module switchboard_std::aggregator {
 
     public fun remove_job(aggregator: &mut Aggregator, job_address: address, ctx: &mut TxContext) {
         assert!(has_authority(aggregator, ctx), errors::InvalidAuthority());
+        assert!(aggregator.version == switchboard::version(), errors::InvalidVersion());
         let job_data = dynamic_object_field::borrow_mut<vector<u8>, AggregatorJobData>(&mut aggregator.id, b"job_data");
         let (is_in, idx) = vector::index_of(&job_data.job_keys, &job_address);
         if (!is_in) {
@@ -337,6 +346,8 @@ module switchboard_std::aggregator {
         ctx: &mut TxContext,
     ) {
         assert!(has_authority(aggregator, ctx), errors::InvalidAuthority());
+        assert!(aggregator.version == switchboard::version(), errors::InvalidVersion());
+
         aggregator.name = name;
         aggregator.min_job_results = min_job_results;
         aggregator.variance_threshold = variance_threshold;
@@ -469,27 +480,30 @@ module switchboard_std::aggregator {
 
     }
 
-
     // Package Scoped Functions ---------------------- //
     // only available to functions for which friend_key is available
-
+    
     public fun add_crank_row_count<T>(aggregator: &mut Aggregator, _friend_key: &T) {
         assert!(&aggregator.friend_key == &utils::type_of<T>(), errors::InvalidPackage());
+        assert!(aggregator.version == switchboard::version(), errors::InvalidVersion());
         aggregator.crank_row_count = aggregator.crank_row_count + 1;
     }
 
     public fun sub_crank_row_count<T>(aggregator: &mut Aggregator, _friend_key: &T) {
         assert!(&aggregator.friend_key == &utils::type_of<T>(), errors::InvalidPackage());
+        assert!(aggregator.version == switchboard::version(), errors::InvalidVersion());
         aggregator.crank_row_count = aggregator.crank_row_count - 1;
     }
  
     public fun increment_curr_interval_payouts<T>(aggregator: &mut Aggregator, _friend_key: &T) {
         assert!(&aggregator.friend_key == &utils::type_of<T>(), errors::InvalidPackage());
+        assert!(aggregator.version == switchboard::version(), errors::InvalidVersion());
         aggregator.curr_interval_payouts = aggregator.curr_interval_payouts + 1;
     }
  
     public fun next_payment_interval<T>(aggregator: &mut Aggregator, _friend_key: &T) {
         assert!(&aggregator.friend_key == &utils::type_of<T>(), errors::InvalidPackage());
+        assert!(aggregator.version == switchboard::version(), errors::InvalidVersion());
         aggregator.interval_id = aggregator.interval_id + 1;
         aggregator.curr_interval_payouts = 0; 
     }
@@ -501,6 +515,7 @@ module switchboard_std::aggregator {
         _friend_key: &T,
     ) {
         assert!(&aggregator.friend_key == &utils::type_of<T>(), errors::InvalidPackage());
+        assert!(aggregator.version == switchboard::version(), errors::InvalidVersion());
         utils::escrow_deposit(&mut aggregator.escrows, addr, coin);
     }
 
@@ -512,6 +527,7 @@ module switchboard_std::aggregator {
         ctx: &mut TxContext,
     ): Coin<CoinType> {
         assert!(&aggregator.friend_key == &utils::type_of<T>(), errors::InvalidPackage());
+        assert!(aggregator.version == switchboard::version(), errors::InvalidVersion());
         utils::escrow_withdraw(&mut aggregator.escrows, addr, amount, ctx)
     }
 
@@ -524,6 +540,8 @@ module switchboard_std::aggregator {
         _friend_key: &T
     ): (bool, SwitchboardDecimal) {
         assert!(&aggregator.friend_key == &utils::type_of<T>(), errors::InvalidPackage());
+        assert!(aggregator.version == switchboard::version(), errors::InvalidVersion());
+
         let batch_size = aggregator.batch_size;
         let min_oracle_results = aggregator.min_oracle_results;
 
@@ -564,6 +582,17 @@ module switchboard_std::aggregator {
         (confirmed, result)
     }
 
+    // Migrate to new version of switchboard lib
+    entry fun migrate(aggregator: &mut Aggregator, _cap: &AdminCap) {
+        assert!(aggregator.version < switchboard::version(), errors::InvalidPackage());
+        aggregator.version = switchboard::version();
+    }
+
+    // Migrate friend key to update package authority
+    public fun migrate_package<T,K>(aggregator: &mut Aggregator, _friend_key: &T, _new_friend_key: &K) {
+        assert!(&aggregator.friend_key == &utils::type_of<T>(), errors::InvalidPackage());
+        aggregator.friend_key = utils::type_of<K>();
+    }
 
     #[test_only]
     struct SecretKey has drop {}
@@ -641,8 +670,6 @@ module switchboard_std::aggregator {
         // add another value
         set_value_for_testing(12, 9, false, &mut aggregator, now, test_scenario::ctx(scenario));
         set_value_for_testing(12, 9, false, &mut aggregator, now, test_scenario::ctx(scenario));
-
-
 
         // check timestamp
         assert!(timestamp == now, errors::InvalidArgument());

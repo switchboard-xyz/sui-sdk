@@ -1,4 +1,5 @@
 module switchboard_std::quote {
+    use switchboard_std::switchboard::{Self, AdminCap};
     use switchboard_std::utils;
     use switchboard_std::errors;
     use sui::object::{Self, UID};
@@ -18,6 +19,7 @@ module switchboard_std::quote {
         valid_until: u64,
         content_hash_enabled: bool,
         friend_key: vector<u8>,
+        version: u64,
     }
 
     public fun VERIFICATION_PENDING(): u8 { 0 }
@@ -45,6 +47,7 @@ module switchboard_std::quote {
             valid_until: 0,
             content_hash_enabled,
             friend_key: utils::type_of<T>(),
+            version: switchboard::version(),
         }
     }
 
@@ -89,6 +92,8 @@ module switchboard_std::quote {
     }
 
     public fun is_valid(quote: &Quote, now: u64): bool {
+        assert!(quote.version == switchboard::version(), errors::InvalidVersion());
+
         if (quote.verification_status == VERIFICATION_SUCCESS()) {
             return true
         };
@@ -126,6 +131,8 @@ module switchboard_std::quote {
         _friend_key: &T,
     ) {
         assert!(&quote.friend_key == &utils::type_of<T>(), errors::InvalidPackage());
+        assert!(quote.version == switchboard::version(), errors::InvalidVersion());
+
         quote.node_addr = node_addr;
         quote.node_authority = node_authority;
         quote.queue_addr = queue_addr;
@@ -142,6 +149,8 @@ module switchboard_std::quote {
         _friend_key: &T,
     ) {
         assert!(&quote.friend_key == &utils::type_of<T>(), errors::InvalidPackage());
+        assert!(quote.version == switchboard::version(), errors::InvalidVersion());
+
         quote.verification_status = VERIFICATION_OVERRIDE();
         quote.valid_until = valid_until;
         quote.verification_timestamp = now;
@@ -154,6 +163,8 @@ module switchboard_std::quote {
         _friend_key: &T,
     ) {
         assert!(&quote.friend_key == &utils::type_of<T>(), errors::InvalidPackage());
+        assert!(quote.version == switchboard::version(), errors::InvalidVersion());
+
         quote.verification_status = VERIFICATION_SUCCESS();
         quote.verification_timestamp = now;
         quote.valid_until = valid_until;
@@ -164,6 +175,17 @@ module switchboard_std::quote {
         _friend_key: &T,
     ) {
         assert!(&quote.friend_key == &utils::type_of<T>(), errors::InvalidPackage());
+        assert!(quote.version == switchboard::version(), errors::InvalidVersion());
         quote.verification_status = VERIFICATION_FAILURE();
+    }
+
+    public fun migrate_package<T,K>(quote: &mut Quote, _friend_key: &T, _new_friend_key: &K) {
+        assert!(&quote.friend_key == &utils::type_of<T>(), errors::InvalidPackage());
+        quote.friend_key = utils::type_of<K>();
+    }
+
+    entry fun migrate(quote: &mut Quote, _cap: &AdminCap) {
+        assert!(quote.version < switchboard::version(), errors::InvalidPackage());
+        quote.version = switchboard::version();
     }
 }

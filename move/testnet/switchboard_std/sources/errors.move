@@ -23,4 +23,5 @@ module switchboard_std::errors {
     public fun InvalidConstraint(): u64 { 21 }
     public fun InvalidTimestamp(): u64 { 22 }
     public fun InvalidPackage(): u64 { 23 }
+    public fun InvalidVersion(): u64 { 24 }
 }
