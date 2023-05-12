@@ -56,7 +56,7 @@ export class SuiDecimal {
       value.pop();
     }
 
-    // Aptos decimals cannot have a negative scale
+    // Sui decimals cannot have a negative scale
     while (value.length - e < 0) {
       value.push(0);
     }
@@ -273,7 +273,7 @@ const replaceObj = (obj: any) => {
 };
 
 /**
- * Sends and waits for an aptos tx to be confirmed
+ * Sends and waits for a sui tx to be confirmed
  * @param signer
  * @param txn
  * @param debug

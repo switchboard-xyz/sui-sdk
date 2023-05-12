@@ -1,6 +1,8 @@
 <div align="center">
 
-![Switchboard Logo](https://github.com/switchboard-xyz/sbv2-core/raw/main/website/static/img/icons/switchboard/avatar.png)
+<!-- commonheader -->
+
+<!-- commonheaderstop -->
 
 # Sui Testnet feed-parser
 
@@ -21,4 +23,6 @@ sui client publish --gas-budget 100000000
 
 ## Usage
 
-N/A
+<!-- usage -->
+
+<!-- usagestop -->

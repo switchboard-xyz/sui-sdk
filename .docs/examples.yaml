@@ -1,0 +1,9 @@
+examples:
+  - name: "feed-parser"
+    description: Read a Switchboard feed on Sui"
+    language: "move"
+    path: "programs/mainnet/feed-parser"
+  - name: "feed-parser (testnet)"
+    description: Read a Switchboard feed on Sui testnet"
+    language: "move"
+    path: "programs/testnet/feed-parser"
