@@ -45,23 +45,6 @@ module switchboard_std::math {
         (value, dec, neg)
     }
 
-    fun max(a: u8, b: u8): u8 {
-        if (a > b) a else b
-    }
-
-    fun min(a: u8, b: u8): u8 {
-        if (a > b) b else a
-    }
-
-    // abs(a - b)
-    fun sub_abs_u8(a: u8, b: u8): u8 {
-        if (a > b) {
-            a - b
-        } else {
-            b - a
-        }
-    }
-
     public fun zero(): SwitchboardDecimal {
       SwitchboardDecimal {
         value: 0,
@@ -89,10 +72,6 @@ module switchboard_std::math {
 
     fun abs_gt(val1: &SwitchboardDecimal, val2: &SwitchboardDecimal): bool {
         val1.value > val2.value
-    }
-
-    fun abs_lt(val1: &SwitchboardDecimal, val2: &SwitchboardDecimal): bool {
-        val1.value < val2.value
     }
 
     public fun add(val1: &SwitchboardDecimal, val2: &SwitchboardDecimal): SwitchboardDecimal {
